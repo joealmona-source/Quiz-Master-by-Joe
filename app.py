@@ -90,11 +90,11 @@ if choice == "Subject Settings":
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
     
-    # Restored your manual text input box fallback for the Gemini Key
-    api_key = st.text_input("Enter Gemini API Key", type="password")
-    if not api_key and "GEMINI_API_KEY" in st.secrets:
+    if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
-        
+    else:
+        api_key = None
+    
     if api_key:
         client = genai.Client(api_key=api_key)
         col1, col2 = st.columns(2)
@@ -113,13 +113,13 @@ elif choice == "AI Question Generator":
                     Generate {num_q} standard secondary school level Multiple Choice questions for {subject} on topic: '{topic}'.
                     
                     CURRICULUM ALIGNMENT: 
-                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for Junior Secondary (JSS) or Senior Secondary (SSS) schools.
-                    2. Benchmark difficulty and syllabus standards against past WAEC, NECO, and JAMB national exams. No outrageous or abstract university-level questions.
-                    3. If the subject involves math or calculations (like Mathematics, Physics, or Chemistry), ensure at least half of the questions are calculation problems.
+                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for Junior Secondary (JSS) or Senior Secondary (SSS) schools as appropriate for the topic.
+                    2. Benchmark the difficulty, tone, and syllabus standards against past WAEC, NECO, and JAMB national examinations. Do not generate outrageous, university-level, or completely abstract questions.
+                    3. If the subject is Physics or Chemistry, ensure that at least half of the questions are word problems requiring numerical calculations, formulas, and standard units.
                     
                     STRICT FORMATTING RULE:
                     - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'.
-                    - The 'Options' field must be a JSON array containing EXACTLY 4 or 5 strings max (Never exceed Option E). 
+                    - The 'Options' field must be a JSON array containing EXACTLY 4 or 5 strings max (Never exceed 5 options/Option E). 
                     - Do NOT include labels like 'A)', 'B)' inside the raw options array elements.
                     - The 'Correct Answer' field must map to the final letter indicator with its value matching a chosen element (e.g., 'A) 10 m/s').
                     """
@@ -128,15 +128,16 @@ elif choice == "AI Question Generator":
                     Generate {num_q} standard secondary school level Short Answer/Theory questions for {subject} on topic: '{topic}'.
                     
                     CURRICULUM ALIGNMENT & STYLE:
-                    1. Align strictly with the NERDC curriculum for JSS/SSS, benchmarked against WAEC, NECO, and JAMB.
-                    2. STYLE CONSTRAINT: Frame the questions as direct fill-in-the-blank or single-phrase recall tasks where only a single straight word, phrase, or exact numerical value is required. Avoid 'explanations' or full-sentence responses.
-                       - Example Question: "The ability of living things to respond to stimuli is termed ___"
-                       - Example Correct Answer: "Irritability"
-                    3. CALCULATION CONSTRAINT: For Mathematics, Physics, Chemistry, or any calculation problem, the question must ask for a final result, and the 'Correct Answer' field must contain ONLY the absolute final numerical value with its proper unit. Do NOT include any formulas, derivation steps, working out, or text explanations.
-                       - Example Calculation Answer: "120 cm³" or "25 Hz" or "x = 4"
+                    1. Align strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for JSS/SSS.
+                    2. Benchmark the core vocabulary against past WAEC, NECO, and JAMB standards.
+                    3. STYLE CONSTRAINT: Frame the questions as direct fill-in-the-blank or single-phrase recall tasks where only a single straight word or precise numerical value is required. Avoid questions asking for 'explanations', 'descriptions', or long full-sentence answers.
+                       - Good Example Question: "The ability of living things to respond to stimuli is termed ___"
+                       - Good Example Correct Answer: "Irritability"
+                    4. CALCULATION CONSTRAINT: If the subject involves math or calculations (such as Mathematics, Physics, or Chemistry), structure the question to ask for a final result, and ensure the 'Correct Answer' field contains ONLY the absolute final numerical value with its proper unit (e.g., "120 cm³", "25 Hz", or "x = 4"). Do NOT include formulas, derivation steps, working out, or text explanations.
                     
                     STRICT FORMATTING RULE:
-                    - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'. Options field should be an empty string.
+                    - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'.
+                    - The 'Correct Answer' field must contain ONLY the single word, short phrase, or final numerical answer with units. Do not include full conversational sentences or explanations. Options field should be an empty string.
                     """
                 
                 try:
@@ -171,7 +172,7 @@ elif choice == "AI Question Generator":
                 st.success("Committed to database!")
                 del st.session_state["temp_generated"]
     else:
-        st.warning("Please provide a Gemini API Key.")
+        st.warning("Please configure your GEMINI_API_KEY inside your Streamlit Secrets Panel to activate.")
 
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
@@ -204,7 +205,7 @@ elif choice == "View Quiz Bank":
     else:
         st.info("No questions stored yet.")
 
-# --- MODULE 4: LIVE COMPETITION MODE (SAFE MARKDOWN FIX) ---
+# --- MODULE 4: LIVE COMPETITION MODE (COMPACT 5-COLUMN GRID) ---
 elif choice == "Live Competition Mode":
     st.header("🎬 Grand Arena - Competition Screen")
     
@@ -263,7 +264,6 @@ elif choice == "Live Competition Mode":
             
             st.write("---")
             
-            # Replaced the broken custom HTML tag that caused your layout TypeError with native Markdown heading labels
             st.markdown(f"### 📍 Question Container {idx + 1} of {len(q_list)}")
             st.info(f"**Subject Category:** {current_q['Subject']} | **Topic Field:** {current_q['Topic']} | **Format:** {current_q['Type']}")
             
@@ -308,7 +308,7 @@ elif choice == "Live Competition Mode":
                     st.rerun()
             
             if st.session_state.show_answer:
-                label = "Correct Option" if current_q['Type'] == "Multiple Choice (Objectives)" else "Expected Short Answer"
+                label = "Correct Option" if current_q['Type'] == "Multiple Choice (Objectives)" else "Expected Points/Rubric"
                 st.success(f"**{label}:** {current_q['Correct Answer']}")
                 
     else:
