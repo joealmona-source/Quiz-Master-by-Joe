@@ -86,7 +86,7 @@ if choice == "Subject Settings":
                 st.warning(f"'{sub_to_edit}' removed from list configuration.")
                 st.rerun()
 
-# --- MODULE 1: AI QUESTION GENERATOR ---
+# --- MODULE 1: AI QUESTION GENERATOR (NERDC & WAEC/JAMB CURRICULUM GUARDRAILS) ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
     
@@ -106,22 +106,35 @@ elif choice == "AI Question Generator":
             num_q = st.slider("Number of Questions", 1, 10, 3)
             
         if st.button("✨ Auto-Generate Questions", type="primary"):
-            with st.spinner("Drafting formatted numerical and theoretical questions..."):
+            with st.spinner("Drafting standard NERDC curriculum questions..."):
                 
                 if q_type == "Multiple Choice (Objectives)":
                     prompt = f"""
-                    Generate {num_q} intermediate-to-hard secondary level Multiple Choice questions for {subject} on topic: '{topic}'.
-                    CRITICAL DIRECTION 1: If the subject is Physics or Chemistry, ensure that at least half of the questions are word problems requiring numerical calculations, formulas, and units.
-                    CRITICAL DIRECTION 2: Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'.
-                    The 'Options' field must be an array of exactly 4 strings. Do NOT include prefixes like 'A)', 'B)' inside the JSON array values themselves.
-                    The 'Correct Answer' field must state the final correct answer letter followed by the option content, matching exactly one of your generated choices (e.g., 'A) 10 m/s').
+                    Generate {num_q} standard secondary school level Multiple Choice questions for {subject} on topic: '{topic}'.
+                    
+                    CURRICULUM ALIGNMENT: 
+                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for Junior Secondary (JSS) or Senior Secondary (SSS) schools as appropriate for the topic.
+                    2. Benchmark the difficulty, tone, and syllabus standards against past WAEC, NECO, and JAMB national examinations. Do not generate outrageous, university-level, or completely abstract questions.
+                    3. If the subject is Physics or Chemistry, ensure that at least half of the questions are word problems requiring numerical calculations, formulas, and standard units.
+                    
+                    STRICT FORMATTING RULE:
+                    - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'.
+                    - The 'Options' field must be a JSON array containing EXACTLY 4 or 5 strings max (Never exceed 5 options/Option E). 
+                    - Do NOT include labels like 'A)', 'B)' inside the raw options array elements.
+                    - The 'Correct Answer' field must map to the final letter indicator with its value matching a chosen element (e.g., 'A) 10 m/s').
                     """
                 else:
                     prompt = f"""
-                    Generate {num_q} intermediate-to-hard secondary level Short Answer/Theory questions for {subject} on topic: '{topic}'.
-                    CRITICAL DIRECTION: If the subject is Physics or Chemistry, ensure that the questions include calculation-based tasks using formulas.
-                    Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'.
-                    The 'Correct Answer' field should contain the final numerical answer with units and a brief mention of the formula/rubric step used. Options field should be empty string.
+                    Generate {num_q} standard secondary school level Short Answer/Theory questions for {subject} on topic: '{topic}'.
+                    
+                    CURRICULUM ALIGNMENT:
+                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for Junior Secondary (JSS) or Senior Secondary (SSS) schools.
+                    2. Benchmark the difficulty, tone, and syllabus standards against past WAEC, NECO, and JAMB national examinations.
+                    3. If the subject is Physics or Chemistry, ensure that the questions include calculation-based tasks using formulas.
+                    
+                    STRICT FORMATTING RULE:
+                    - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'.
+                    - The 'Correct Answer' field should contain the final numerical answer with units and a brief mention of the formula/rubric step used. The Options field should be empty string.
                     """
                 
                 try:
@@ -134,6 +147,8 @@ elif choice == "AI Question Generator":
                     for q in generated_data:
                         raw_opts = q.get("Options", "")
                         if isinstance(raw_opts, list):
+                            # Truncate to maximum of 5 options just in case AI slips up
+                            raw_opts = raw_opts[:5]
                             opts_str = ", ".join([str(x).strip() for x in raw_opts])
                         else:
                             opts_str = str(raw_opts)
@@ -188,7 +203,7 @@ elif choice == "View Quiz Bank":
     else:
         st.info("No questions stored yet.")
 
-# --- MODULE 4: LIVE COMPETITION MODE (COMPACT GRID EDITION) ---
+# --- MODULE 4: LIVE COMPETITION MODE (COMPACT 5-COLUMN GRID) ---
 elif choice == "Live Competition Mode":
     st.header("🎬 Grand Arena - Competition Screen")
     
@@ -233,7 +248,6 @@ elif choice == "Live Competition Mode":
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
             
-            # --- FIXED 5-COLUMN COMPACT MOBILE GRID ---
             st.markdown("### 🔢 Choose / Jump to Question Number:")
             num_columns = 5
             grid_cols = st.columns(num_columns) 
@@ -258,11 +272,15 @@ elif choice == "Live Competition Mode":
                 prefixes = ["A)", "B)", "C)", "D)", "E)"]
                 
                 for index, option in enumerate(options_split):
+                    # Hard ceiling: skip parsing anything beyond option E (index 4)
+                    if index >= len(prefixes):
+                        break
+                        
                     clean_opt = option.strip()
                     if any(clean_opt.startswith(p) for p in prefixes):
                         st.markdown(f"**🔹 {clean_opt}**")
                     else:
-                        pref = prefixes[index] if index < len(prefixes) else "•"
+                        pref = prefixes[index]
                         st.markdown(f"**🔹 {pref} {clean_opt}**")
             
             st.write("---")
