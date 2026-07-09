@@ -90,11 +90,11 @@ if choice == "Subject Settings":
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
     
-    if "GEMINI_API_KEY" in st.secrets:
+    # Restored your manual text input box fallback for the Gemini Key
+    api_key = st.text_input("Enter Gemini API Key", type="password")
+    if not api_key and "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
-    else:
-        api_key = None
-    
+        
     if api_key:
         client = genai.Client(api_key=api_key)
         col1, col2 = st.columns(2)
@@ -171,7 +171,7 @@ elif choice == "AI Question Generator":
                 st.success("Committed to database!")
                 del st.session_state["temp_generated"]
     else:
-        st.warning("Please configure your GEMINI_API_KEY inside your Streamlit Secrets Panel to activate.")
+        st.warning("Please provide a Gemini API Key.")
 
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
@@ -204,7 +204,7 @@ elif choice == "View Quiz Bank":
     else:
         st.info("No questions stored yet.")
 
-# --- MODULE 4: LIVE COMPETITION MODE (COMPACT 5-COLUMN GRID) ---
+# --- MODULE 4: LIVE COMPETITION MODE (SAFE MARKDOWN FIX) ---
 elif choice == "Live Competition Mode":
     st.header("🎬 Grand Arena - Competition Screen")
     
@@ -263,6 +263,7 @@ elif choice == "Live Competition Mode":
             
             st.write("---")
             
+            # Replaced the broken custom HTML tag that caused your layout TypeError with native Markdown heading labels
             st.markdown(f"### 📍 Question Container {idx + 1} of {len(q_list)}")
             st.info(f"**Subject Category:** {current_q['Subject']} | **Topic Field:** {current_q['Topic']} | **Format:** {current_q['Type']}")
             
