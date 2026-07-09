@@ -86,7 +86,7 @@ if choice == "Subject Settings":
                 st.warning(f"'{sub_to_edit}' removed from list configuration.")
                 st.rerun()
 
-# --- MODULE 1: AI QUESTION GENERATOR (STRICT NERDC, SHORT-ANSWER COMPACTNESS, & MAX E) ---
+# --- MODULE 1: AI QUESTION GENERATOR (NERDC & WAEC/JAMB CURRICULUM GUARDRAILS) ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
     
@@ -127,68 +127,14 @@ elif choice == "AI Question Generator":
                     prompt = f"""
                     Generate {num_q} standard secondary school level Short Answer/Theory questions for {subject} on topic: '{topic}'.
                     
-                    CURRICULUM ALIGNMENT & STYLE:
-                    1. Align strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for JSS/SSS.
-                    2. Benchmark the core vocabulary against past WAEC, NECO, and JAMB standards.
-                    3. STYLE CONSTRAINT: Frame the questions as direct fill-in-the-blank or single-phrase recall tasks where only a single straight word or precise numerical value is required. Avoid questions asking for 'explanations', 'descriptions', or long full-sentence answers.
-                       - Good Example Question: "The ability of living things to respond to stimuli is termed ___"
-                       - Good Example Correct Answer: "Irritability"
-                    4. If the subject is Physics or Chemistry and calculations are triggered, structure the prompt to ask for just the final calculated figure with its corresponding units (e.g., "50 Hz" or "0.5 kg").
+                    CURRICULUM ALIGNMENT:
+                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for Junior Secondary (JSS) or Senior Secondary (SSS) schools.
+                    2. Benchmark the difficulty, tone, and syllabus standards against past WAEC, NECO, and JAMB national examinations.
+                    3. If the subject is Physics or Chemistry, ensure that the questions include calculation-based tasks using formulas.
                     
                     STRICT FORMATTING RULE:
                     - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'.
-                    - The 'Correct # --- MODULE 1: AI QUESTION GENERATOR (STRICT NERDC, SHORT-ANSWER COMPACTNESS, & MAX E) ---
-elif choice == "AI Question Generator":
-    st.header("🤖 AI-Assisted Question Generator")
-    
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-    else:
-        api_key = None
-    
-    if api_key:
-        client = genai.Client(api_key=api_key)
-        col1, col2 = st.columns(2)
-        with col1:
-            subject = st.selectbox("Subject", st.session_state.subjects)
-            q_type = st.radio("Select Question Category", ["Multiple Choice (Objectives)", "Short Answer / Theory"])
-        with col2:
-            topic = st.text_input("Topic / Area")
-            num_q = st.slider("Number of Questions", 1, 10, 3)
-            
-        if st.button("✨ Auto-Generate Questions", type="primary"):
-            with st.spinner("Drafting standard NERDC curriculum questions..."):
-                
-                if q_type == "Multiple Choice (Objectives)":
-                    prompt = f"""
-                    Generate {num_q} standard secondary school level Multiple Choice questions for {subject} on topic: '{topic}'.
-                    
-                    CURRICULUM ALIGNMENT: 
-                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for Junior Secondary (JSS) or Senior Secondary (SSS) schools as appropriate for the topic.
-                    2. Benchmark the difficulty, tone, and syllabus standards against past WAEC, NECO, and JAMB national examinations. Do not generate outrageous, university-level, or completely abstract questions.
-                    3. If the subject is Physics or Chemistry, ensure that at least half of the questions are word problems requiring numerical calculations, formulas, and standard units.
-                    
-                    STRICT FORMATTING RULE:
-                    - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'.
-                    - The 'Options' field must be a JSON array containing EXACTLY 4 or 5 strings max (Never exceed 5 options/Option E). 
-                    - Do NOT include labels like 'A)', 'B)' inside the raw options array elements.
-                    - The 'Correct Answer' field must map to the final letter indicator with its value matching a chosen element (e.g., 'A) 10 m/s').
-                    """
-                else:
-                    prompt = f"""
-                    Generate {num_q} standard secondary school level Short Answer/Theory questions for {subject} on topic: '{topic}'.
-                    
-                    CURRICULUM ALIGNMENT & STYLE:
-                    1. Align strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for JSS/SSS.
-                    2. Benchmark the core vocabulary against past WAEC, NECO, and JAMB standards.
-                    3. STYLE CONSTRAINT: Frame the questions as direct fill-in-the-blank or single-phrase recall tasks where only a single straight word or precise numerical value is required. Avoid questions asking for 'explanations', 'descriptions', or long full-sentence answers.
-                       - Good Example Question: "The ability of living things to respond to stimuli is termed ___"
-                       - Good Example Correct Answer: "Irritability"
-                    4. If the subject is Physics or Chemistry and calculations are triggered, structure the prompt to ask for just the final calculated figure with its corresponding units (e.g., "50 Hz" or "0.5 kg").
-                    
-                    STRICT FORMATTING RULE:
-                    - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'.
-                    - The 'Correct Answer' field must contain ONLY the single word, short phrase, or final numerical answer with units. Do not include full conversational sentences or explanations. Options field should be an empty string.
+                    - The 'Correct Answer' field should contain the final numerical answer with units and a brief mention of the formula/rubric step used. The Options field should be empty string.
                     """
                 
                 try:
@@ -201,6 +147,7 @@ elif choice == "AI Question Generator":
                     for q in generated_data:
                         raw_opts = q.get("Options", "")
                         if isinstance(raw_opts, list):
+                            # Truncate to maximum of 5 options just in case AI slips up
                             raw_opts = raw_opts[:5]
                             opts_str = ", ".join([str(x).strip() for x in raw_opts])
                         else:
@@ -224,43 +171,6 @@ elif choice == "AI Question Generator":
                 del st.session_state["temp_generated"]
     else:
         st.warning("Please configure your GEMINI_API_KEY inside your Streamlit Secrets Panel to activate.")
-' field must contain ONLY the single word, short phrase, or final numerical answer with units. Do not include full conversational sentences or explanations. Options field should be an empty string.
-                    """
-                
-                try:
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash', contents=prompt,
-                        config=types.GenerateContentConfig(response_mime_type="application/json")
-                    )
-                    generated_data = json.loads(response.text)
-                    new_qs = []
-                    for q in generated_data:
-                        raw_opts = q.get("Options", "")
-                        if isinstance(raw_opts, list):
-                            raw_opts = raw_opts[:5]
-                            opts_str = ", ".join([str(x).strip() for x in raw_opts])
-                        else:
-                            opts_str = str(raw_opts)
-                            
-                        new_qs.append({
-                            "Subject": subject, "Topic": topic, "Type": q_type,
-                            "Question": q["Question"], "Options": opts_str, "Correct Answer": q["Correct Answer"]
-                        })
-                    st.session_state["temp_generated"] = pd.DataFrame(new_qs)
-                    st.success("Done!")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-                    
-        if "temp_generated" in st.session_state:
-            st.dataframe(st.session_state["temp_generated"], use_container_width=True)
-            if st.button("💾 Save All Selected to Database"):
-                df_quiz = pd.concat([df_quiz, st.session_state["temp_generated"]], ignore_index=True)
-                df_quiz.to_csv(DB_FILE, index=False)
-                st.success("Committed to database!")
-                del st.session_state["temp_generated"]
-    else:
-        st.warning("Please configure your GEMINI_API_KEY inside your Streamlit Secrets Panel to activate.")
-
 
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
