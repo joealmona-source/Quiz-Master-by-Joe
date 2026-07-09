@@ -17,7 +17,6 @@ if os.path.exists(DB_FILE):
 else:
     df_quiz = pd.DataFrame(columns=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"])
 
-# Dynamic Subject Management
 DEFAULT_SUBJECTS = ["Physics", "Chemistry", "Biology", "General Science", "P.H.E."]
 if os.path.exists(SUBJECTS_FILE):
     with open(SUBJECTS_FILE, "r") as f:
@@ -28,7 +27,6 @@ else:
 if "subjects" not in st.session_state:
     st.session_state.subjects = stored_subjects
 
-# Live Competition State Management
 if "live_questions" not in st.session_state:
     st.session_state.live_questions = []
 if "current_q_index" not in st.session_state:
@@ -45,13 +43,12 @@ st.sidebar.title("🏆 Quiz Control Panel")
 menu = ["AI Question Generator", "Manual Input", "View Quiz Bank", "Subject Settings", "Live Competition Mode"]
 choice = st.sidebar.selectbox("Go to Module", menu)
 
-# --- MODULE: SUBJECT SETTINGS (NEW!) ---
+# --- MODULE: SUBJECT SETTINGS ---
 if choice == "Subject Settings":
     st.header("⚙️ Subject Management Dashboard")
     st.caption("Customize your school's curriculum fields dynamically.")
     
     col1, col2 = st.columns(2)
-    
     with col1:
         st.subheader("➕ Add New Subject")
         new_sub = st.text_input("Enter Subject Name", placeholder="e.g., Mathematics, Agricultural Science")
@@ -75,7 +72,6 @@ if choice == "Subject Settings":
             if st.button("Rename Subject"):
                 idx = st.session_state.subjects.index(sub_to_edit)
                 st.session_state.subjects[idx] = rename_val.strip()
-                # Update records in the main database too
                 if not df_quiz.empty:
                     df_quiz.loc[df_quiz["Subject"] == sub_to_edit, "Subject"] = rename_val.strip()
                     df_quiz.to_csv(DB_FILE, index=False)
@@ -170,7 +166,7 @@ elif choice == "View Quiz Bank":
     else:
         st.info("No questions stored yet.")
 
-# --- MODULE 4: LIVE COMPETITION MODE (UPGRADED!) ---
+# --- MODULE 4: LIVE COMPETITION MODE (STRICT TYPE ENFORCEMENT) ---
 elif choice == "Live Competition Mode":
     st.header("🎬 Grand Arena - Competition Screen")
     
@@ -178,28 +174,33 @@ elif choice == "Live Competition Mode":
         if len(st.session_state.live_questions) == 0:
             st.subheader("Setup Inter-Subject Competition Round")
             
-            # 1. Multi-Subject Selection
-            chosen_subjects = st.multiselect("Select Subjects to include in this round", df_quiz["Subject"].unique())
+            # 1. Choose Round Format First (Strict Enforcement)
+            chosen_type = st.radio("Select Competition Format for this Session", ["Multiple Choice (Objectives)", "Short Answer / Theory"], horizontal=True)
+            st.write("---")
+            
+            # Filter main database by selected type immediately
+            type_filtered_pool = df_quiz[df_quiz["Type"] == chosen_type]
+            
+            # 2. Multi-Subject Selection based on available subjects for that type
+            available_subjects = type_filtered_pool["Subject"].unique()
+            chosen_subjects = st.multiselect("Select Subjects to include in this round", available_subjects)
             
             if chosen_subjects:
-                st.write("🔧 Set Question Quantities per Subject:")
+                st.write(f"🔧 Set Question Quantities per Subject ({chosen_type} only):")
                 config_counts = {}
-                valid_pool = True
                 
-                # 2. Dynamic Count Configuration inputs per selected subject
                 for s in chosen_subjects:
-                    max_avail = len(df_quiz[df_quiz["Subject"] == s])
+                    max_avail = len(type_filtered_pool[type_filtered_pool["Subject"] == s])
                     config_counts[s] = st.number_input(f"Number of questions from '{s}' (Max: {max_avail})", min_value=0, max_value=max_avail, value=min(2, max_avail))
                 
                 if st.button("🚀 Compile and Randomize Game Show Pool", type="primary"):
                     round_pool = []
                     for s, count in config_counts.items():
                         if count > 0:
-                            sub_pool = df_quiz[df_quiz["Subject"] == s].sample(n=int(count)).to_dict(orient="records")
+                            sub_pool = type_filtered_pool[type_filtered_pool["Subject"] == s].sample(n=int(count)).to_dict(orient="records")
                             round_pool.extend(sub_pool)
                     
                     if round_pool:
-                        # Fully randomize order to mix subjects completely
                         random.shuffle(round_pool)
                         st.session_state.live_questions = round_pool
                         st.session_state.current_q_index = 0
@@ -207,17 +208,17 @@ elif choice == "Live Competition Mode":
                         st.rerun()
                     else:
                         st.error("Please allocate at least 1 question to start.")
+            elif len(available_subjects) == 0:
+                st.warning(f"There are no questions in the database categorized as '{chosen_type}' yet.")
         else:
             q_list = st.session_state.live_questions
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
             
-            # --- FEATURE: CLICKABLE QUESTION NUMBER BUTTONS GRID ---
             st.markdown("### 🔢 Choose / Jump to Question Number:")
-            grid_cols = st.columns(10) # 10 buttons wide layout grid
+            grid_cols = st.columns(10) 
             for i in range(len(q_list)):
                 col_target = grid_cols[i % 10]
-                # Highlighting active question button with a styled marker accent
                 btn_label = f"⭐ {i+1}" if i == idx else f"{i+1}"
                 if col_target.button(btn_label, key=f"nav_btn_{i}", use_container_width=True):
                     st.session_state.current_q_index = i
@@ -226,7 +227,6 @@ elif choice == "Live Competition Mode":
             
             st.write("---")
             
-            # Question Card Screen
             st.markdown(f"### 📍 Question Container {idx + 1} of {len(q_list)}")
             st.info(f"**Subject Category:** {current_q['Subject']} | **Topic Field:** {current_q['Topic']} | **Format:** {current_q['Type']}")
             
@@ -239,7 +239,6 @@ elif choice == "Live Competition Mode":
             
             st.write("---")
             
-            # Core Controls Deck
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 if st.button("👁️ Show/Hide Answer"):
