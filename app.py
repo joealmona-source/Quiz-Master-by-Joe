@@ -102,11 +102,23 @@ elif choice == "AI Question Generator":
             num_q = st.slider("Number of Questions", 1, 10, 3)
             
         if st.button("✨ Auto-Generate Questions", type="primary"):
-            with st.spinner("Drafting questions..."):
+            with st.spinner("Drafting balanced numerical and theoretical questions..."):
+                
+                # --- STRONGER, CALCULATION-FOCUSED PROMPTS TRIDGERS ---
                 if q_type == "Multiple Choice (Objectives)":
-                    prompt = f"Generate {num_q} intermediate-to-hard secondary level Multiple Choice questions for {subject} on topic: '{topic}'. Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'. Options must be 4 choices separated by commas."
+                    prompt = f"""
+                    Generate {num_q} intermediate-to-hard secondary level Multiple Choice questions for {subject} on topic: '{topic}'.
+                    CRITICAL DIRECTION: If the subject is Physics or Chemistry, ensure that at least half of the generated questions are word problems requiring numerical calculations, formulas, calculations, and proper scientific units.
+                    Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'. 
+                    Options must be 4 choices separated by commas (e.g., "10 m/s, 20 m/s, 30 m/s, 40 m/s").
+                    """
                 else:
-                    prompt = f"Generate {num_q} intermediate-to-hard secondary level Short Answer questions for {subject} on topic: '{topic}'. Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'."
+                    prompt = f"""
+                    Generate {num_q} intermediate-to-hard secondary level Short Answer/Theory questions for {subject} on topic: '{topic}'.
+                    CRITICAL DIRECTION: If the subject is Physics or Chemistry, ensure that the questions include calculation-based tasks where students must work out numerical problems using formulas.
+                    Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'.
+                    The 'Correct Answer' field should contain the final numerical answer with units and a brief mention of the formula/rubric step used.
+                    """
                 
                 try:
                     response = client.models.generate_content(
