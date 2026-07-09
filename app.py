@@ -89,8 +89,13 @@ if choice == "Subject Settings":
 # --- MODULE 1: AI QUESTION GENERATOR ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
-    api_key = st.text_input("Enter Gemini API Key", type="password")
     
+    # Reads the key automatically from the Secrets you just saved!
+    if "GEMINI_API_KEY" in st.secrets:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    else:
+        api_key = None
+
     if api_key:
         client = genai.Client(api_key=api_key)
         col1, col2 = st.columns(2)
