@@ -188,12 +188,13 @@ elif choice == "Live Competition Mode":
             st.markdown(f"### 📍 Question {idx + 1} of {len(q_list)} ({current_q['Type']})")
             st.info(f"**Subject:** {current_q['Subject']} | **Topic:** {current_q['Topic']}")
             
-            st.markdown(f"<div style='font-size:24px; font-weight:bold; background-color:#1e293b; padding:20px; border-radius:10px; margin-bottom:20px;'>{current_q['Question']}</div>", unsafe_allowed_html=True)
+            # --- FIXED LINE HERE: Native Streamlit display wrapper instead of raw HTML ---
+            st.subheader(str(current_q['Question']))
             
-            if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and current_q['Options'].strip() != "":
-                options_split = current_q['Options'].split(",")
+            if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and str(current_q['Options']).strip() != "":
+                options_split = str(current_q['Options']).split(",")
                 for option in options_split:
-                    st.markdown(f"<div style='font-size:18px; margin-left:20px; padding:5px;'>🔹 {option.strip()}</div>", unsafe_allowed_html=True)
+                    st.markdown(f"**🔹 {option.strip()}**")
             elif current_q['Type'] == "Short Answer / Theory":
                 st.caption("_📝 Contestants should write down or verbally provide a short analytical response._")
             
@@ -222,7 +223,7 @@ elif choice == "Live Competition Mode":
             
             if st.session_state.show_answer:
                 label = "Correct Option" if current_q['Type'] == "Multiple Choice (Objectives)" else "Expected Points/Rubric"
-                st.markdown(f"<div style='font-size:22px; font-weight:bold; color:#10b981; background-color:#064e3b; padding:15px; border-radius:8px; text-align:center;'>✅ {label}: {current_q['Correct Answer']}</div>", unsafe_allowed_html=True)
+                st.success(f"**{label}:** {current_q['Correct Answer']}")
                 
     else:
         st.info("The database is currently empty. Please add or generate questions before running a competition.")
