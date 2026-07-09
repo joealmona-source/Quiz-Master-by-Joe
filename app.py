@@ -86,7 +86,7 @@ if choice == "Subject Settings":
                 st.warning(f"'{sub_to_edit}' removed from list configuration.")
                 st.rerun()
 
-# --- MODULE 1: AI QUESTION GENERATOR (STRICT ABC FORMATTING) ---
+# --- MODULE 1: AI QUESTION GENERATOR ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
     
@@ -132,7 +132,6 @@ elif choice == "AI Question Generator":
                     generated_data = json.loads(response.text)
                     new_qs = []
                     for q in generated_data:
-                        # Clean handling of option data structures
                         raw_opts = q.get("Options", "")
                         if isinstance(raw_opts, list):
                             opts_str = ", ".join([str(x).strip() for x in raw_opts])
@@ -189,7 +188,7 @@ elif choice == "View Quiz Bank":
     else:
         st.info("No questions stored yet.")
 
-# --- MODULE 4: LIVE COMPETITION MODE (WITH EXPLICIT LABEL PARSING) ---
+# --- MODULE 4: LIVE COMPETITION MODE (COMPACT GRID EDITION) ---
 elif choice == "Live Competition Mode":
     st.header("🎬 Grand Arena - Competition Screen")
     
@@ -234,10 +233,13 @@ elif choice == "Live Competition Mode":
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
             
+            # --- FIXED 5-COLUMN COMPACT MOBILE GRID ---
             st.markdown("### 🔢 Choose / Jump to Question Number:")
-            grid_cols = st.columns(10) 
+            num_columns = 5
+            grid_cols = st.columns(num_columns) 
+            
             for i in range(len(q_list)):
-                col_target = grid_cols[i % 10]
+                col_target = grid_cols[i % num_columns]
                 btn_label = f"⭐ {i+1}" if i == idx else f"{i+1}"
                 if col_target.button(btn_label, key=f"nav_btn_{i}", use_container_width=True):
                     st.session_state.current_q_index = i
@@ -251,14 +253,12 @@ elif choice == "Live Competition Mode":
             
             st.subheader(str(current_q['Question']))
             
-            # --- FIXED DYNAMIC LABEL RENDERING (A), B), C), D) ) ---
             if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and str(current_q['Options']).strip() != "":
                 options_split = str(current_q['Options']).split(",")
                 prefixes = ["A)", "B)", "C)", "D)", "E)"]
                 
                 for index, option in enumerate(options_split):
                     clean_opt = option.strip()
-                    # Prevent nested label duplicates if option already has a prefix label text
                     if any(clean_opt.startswith(p) for p in prefixes):
                         st.markdown(f"**🔹 {clean_opt}**")
                     else:
