@@ -86,16 +86,15 @@ if choice == "Subject Settings":
                 st.warning(f"'{sub_to_edit}' removed from list configuration.")
                 st.rerun()
 
-# --- MODULE 1: AI QUESTION GENERATOR ---
+# --- MODULE 1: AI QUESTION GENERATOR (STRICT ABC FORMATTING) ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
     
-    # Reads the key automatically from the Secrets you just saved!
     if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
     else:
         api_key = None
-
+    
     if api_key:
         client = genai.Client(api_key=api_key)
         col1, col2 = st.columns(2)
@@ -107,22 +106,22 @@ elif choice == "AI Question Generator":
             num_q = st.slider("Number of Questions", 1, 10, 3)
             
         if st.button("✨ Auto-Generate Questions", type="primary"):
-            with st.spinner("Drafting balanced numerical and theoretical questions..."):
+            with st.spinner("Drafting formatted numerical and theoretical questions..."):
                 
-                # --- STRONGER, CALCULATION-FOCUSED PROMPTS TRIDGERS ---
                 if q_type == "Multiple Choice (Objectives)":
                     prompt = f"""
                     Generate {num_q} intermediate-to-hard secondary level Multiple Choice questions for {subject} on topic: '{topic}'.
-                    CRITICAL DIRECTION: If the subject is Physics or Chemistry, ensure that at least half of the generated questions are word problems requiring numerical calculations, formulas, calculations, and proper scientific units.
-                    Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'. 
-                    Options must be 4 choices separated by commas (e.g., "10 m/s, 20 m/s, 30 m/s, 40 m/s").
+                    CRITICAL DIRECTION 1: If the subject is Physics or Chemistry, ensure that at least half of the questions are word problems requiring numerical calculations, formulas, and units.
+                    CRITICAL DIRECTION 2: Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'.
+                    The 'Options' field must be an array of exactly 4 strings. Do NOT include prefixes like 'A)', 'B)' inside the JSON array values themselves.
+                    The 'Correct Answer' field must state the final correct answer letter followed by the option content, matching exactly one of your generated choices (e.g., 'A) 10 m/s').
                     """
                 else:
                     prompt = f"""
                     Generate {num_q} intermediate-to-hard secondary level Short Answer/Theory questions for {subject} on topic: '{topic}'.
-                    CRITICAL DIRECTION: If the subject is Physics or Chemistry, ensure that the questions include calculation-based tasks where students must work out numerical problems using formulas.
+                    CRITICAL DIRECTION: If the subject is Physics or Chemistry, ensure that the questions include calculation-based tasks using formulas.
                     Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'.
-                    The 'Correct Answer' field should contain the final numerical answer with units and a brief mention of the formula/rubric step used.
+                    The 'Correct Answer' field should contain the final numerical answer with units and a brief mention of the formula/rubric step used. Options field should be empty string.
                     """
                 
                 try:
@@ -133,9 +132,16 @@ elif choice == "AI Question Generator":
                     generated_data = json.loads(response.text)
                     new_qs = []
                     for q in generated_data:
+                        # Clean handling of option data structures
+                        raw_opts = q.get("Options", "")
+                        if isinstance(raw_opts, list):
+                            opts_str = ", ".join([str(x).strip() for x in raw_opts])
+                        else:
+                            opts_str = str(raw_opts)
+                            
                         new_qs.append({
                             "Subject": subject, "Topic": topic, "Type": q_type,
-                            "Question": q["Question"], "Options": q.get("Options", ""), "Correct Answer": q["Correct Answer"]
+                            "Question": q["Question"], "Options": opts_str, "Correct Answer": q["Correct Answer"]
                         })
                     st.session_state["temp_generated"] = pd.DataFrame(new_qs)
                     st.success("Done!")
@@ -150,7 +156,7 @@ elif choice == "AI Question Generator":
                 st.success("Committed to database!")
                 del st.session_state["temp_generated"]
     else:
-        st.warning("Please provide a Gemini API Key.")
+        st.warning("Please configure your GEMINI_API_KEY inside your Streamlit Secrets Panel to activate.")
 
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
@@ -161,8 +167,8 @@ elif choice == "Manual Input":
         with col1: sub = st.selectbox("Subject", st.session_state.subjects)
         with col2: top = st.text_input("Topic")
         q_text = st.text_area("Question Text")
-        opts_text = st.text_input("Options (Separated by commas)") if q_type == "Multiple Choice (Objectives)" else ""
-        ans_text = st.text_area("Correct Answer")
+        opts_text = st.text_input("Options (Separated by commas, omitting labels)", placeholder="e.g. 20 Hz, 40 Hz, 60 Hz, 80 Hz") if q_type == "Multiple Choice (Objectives)" else ""
+        ans_text = st.text_area("Correct Answer (Include label prefix if objective, e.g., A) 20 Hz)")
         if st.form_submit_button("Save Question"):
             new_row = {"Subject": sub, "Topic": top, "Type": q_type, "Question": q_text, "Options": opts_text, "Correct Answer": ans_text}
             df_quiz = pd.concat([df_quiz, pd.DataFrame([new_row])], ignore_index=True)
@@ -183,7 +189,7 @@ elif choice == "View Quiz Bank":
     else:
         st.info("No questions stored yet.")
 
-# --- MODULE 4: LIVE COMPETITION MODE (STRICT TYPE ENFORCEMENT) ---
+# --- MODULE 4: LIVE COMPETITION MODE (WITH EXPLICIT LABEL PARSING) ---
 elif choice == "Live Competition Mode":
     st.header("🎬 Grand Arena - Competition Screen")
     
@@ -191,14 +197,10 @@ elif choice == "Live Competition Mode":
         if len(st.session_state.live_questions) == 0:
             st.subheader("Setup Inter-Subject Competition Round")
             
-            # 1. Choose Round Format First (Strict Enforcement)
             chosen_type = st.radio("Select Competition Format for this Session", ["Multiple Choice (Objectives)", "Short Answer / Theory"], horizontal=True)
             st.write("---")
             
-            # Filter main database by selected type immediately
             type_filtered_pool = df_quiz[df_quiz["Type"] == chosen_type]
-            
-            # 2. Multi-Subject Selection based on available subjects for that type
             available_subjects = type_filtered_pool["Subject"].unique()
             chosen_subjects = st.multiselect("Select Subjects to include in this round", available_subjects)
             
@@ -249,10 +251,19 @@ elif choice == "Live Competition Mode":
             
             st.subheader(str(current_q['Question']))
             
+            # --- FIXED DYNAMIC LABEL RENDERING (A), B), C), D) ) ---
             if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and str(current_q['Options']).strip() != "":
                 options_split = str(current_q['Options']).split(",")
-                for option in options_split:
-                    st.markdown(f"**🔹 {option.strip()}**")
+                prefixes = ["A)", "B)", "C)", "D)", "E)"]
+                
+                for index, option in enumerate(options_split):
+                    clean_opt = option.strip()
+                    # Prevent nested label duplicates if option already has a prefix label text
+                    if any(clean_opt.startswith(p) for p in prefixes):
+                        st.markdown(f"**🔹 {clean_opt}**")
+                    else:
+                        pref = prefixes[index] if index < len(prefixes) else "•"
+                        st.markdown(f"**🔹 {pref} {clean_opt}**")
             
             st.write("---")
             
