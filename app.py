@@ -88,7 +88,7 @@ if choice == "Subject Settings":
 # --- MODULE 1: AI QUESTION GENERATOR (POWERED BY GROQ) ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
-    st.caption("Powered by Groq Llama 3")
+    st.caption("Powered by Groq Llama 3.3 (Chief Examiner Mode)")
     
     if "GROQ_API_KEY" in st.secrets:
         api_key = st.secrets["GROQ_API_KEY"]
@@ -106,51 +106,54 @@ elif choice == "AI Question Generator":
             num_q = st.slider("Number of Questions", 1, 10, 3)
             
         if st.button("✨ Auto-Generate Questions", type="primary"):
-            with st.spinner("Drafting standard NERDC curriculum questions..."):
+            with st.spinner(f"Drafting standard NERDC curriculum questions for {subject}..."):
                 
                 if q_type == "Multiple Choice (Objectives)":
                     prompt = f"""
                     Generate {num_q} standard secondary school level Multiple Choice questions for {subject} on topic: '{topic}'.
                     
-                    CURRICULUM ALIGNMENT: 
-                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum covering both Junior Secondary School (JSS) and Senior Secondary School (SSS).
-                    2. Benchmark the difficulty, syllabus standards, and terminology against past WAEC, NECO, and JAMB national examinations.
+                    QUALITY & CURRICULUM RULES: 
+                    1. Align strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for JSS and SSS.
+                    2. Benchmark difficulty against past WAEC, NECO, and JAMB standards. 
+                    3. Do NOT ask basic, trivial recall questions. Questions MUST test higher-order thinking, practical application, and deep conceptual understanding.
+                    4. For Mathematics or Science subjects, ensure standard exam terminology and standard SI units are used perfectly.
                     
-                    STRICT FORMATTING RULE:
-                    - You MUST return a single JSON object containing a root key called "questions".
-                    - The "questions" key must hold a list of objects with exactly these keys: 'Question', 'Options', 'Correct Answer'.
-                    - The 'Options' field must be a JSON array containing EXACTLY 4 or 5 strings (Never exceed 5). 
-                    - Do NOT include labels like 'A)', 'B)' inside the raw options array elements.
-                    - The 'Correct Answer' field must map to the final letter indicator matching the element (e.g., 'A) 10 m/s').
-                    - For Mathematics or calculation problems, give the final exact answer in the options.
+                    STRICT RANDOMIZATION RULE:
+                    - You MUST heavily randomize which option contains the correct answer. 
+                    - It is unacceptable for 'A' to be the correct answer for multiple questions in a row. Shuffle the correct answer evenly across the 1st, 2nd, 3rd, and 4th positions.
+                    
+                    JSON FORMATTING RULE:
+                    - Return a single JSON object with a root key "questions".
+                    - Inside "questions", provide a list of objects with exactly these keys: 'Question', 'Options', 'Correct Answer'.
+                    - 'Options' must be a JSON array containing EXACTLY 4 strings. Do NOT write 'A)', 'B)', etc. inside the array elements (e.g. ["10 m/s", "20 m/s", "30 m/s", "40 m/s"]).
+                    - 'Correct Answer' must explicitly map to the final correct option WITH a letter indicator corresponding to its position in your generated array (e.g., 'C) 30 m/s').
                     """
                 else:
                     prompt = f"""
                     Generate {num_q} standard secondary school level Short Answer/Theory questions for {subject} on topic: '{topic}'.
                     
-                    CURRICULUM ALIGNMENT & STYLE:
-                    1. Align strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum covering both Junior Secondary School (JSS) and Senior Secondary School (SSS).
-                    2. Benchmark against past WAEC, NECO, and JAMB standards.
-                    3. Give STRAIGHT DIRECT ANSWERS ONLY to short answer questions. Absolutely no long explanations or extra sentences.
-                    4. CALCULATION CONSTRAINT: For mathematics and calculation problems, provide ONLY the exact final numerical answer with its proper unit (e.g., "120 cm³", "x = 4"). Do NOT show the working steps.
+                    QUALITY & CURRICULUM RULES:
+                    1. Align strictly with the NERDC curriculum for JSS and SSS.
+                    2. Benchmark against past WAEC, NECO, and JAMB standards. Do not generate overly simplistic questions. Test real understanding and application.
+                    3. Give STRAIGHT DIRECT ANSWERS ONLY to the short answer questions. Do not include long explanations, preambles, or extra sentences.
+                    4. CALCULATION CONSTRAINT: For any mathematics or calculation problems, provide ONLY the final exact numerical answer with its proper unit (e.g., "120 cm³", "x = 4"). Do NOT show the working steps.
                     
-                    STRICT FORMATTING RULE:
-                    - You MUST return a single JSON object containing a root key called "questions".
+                    JSON FORMATTING RULE:
+                    - Return a single JSON object with a root key "questions".
                     - The "questions" key must hold a list of objects with exactly these keys: 'Question', 'Correct Answer'.
                     - 'Correct Answer' must contain ONLY the short phrase or final numerical answer.
-                    - Set 'Options' field as an empty string in your output logic (or leave it out).
+                    - Set 'Options' field as an empty string in your output logic (or omit it entirely).
                     """
                 
                 try:
-                    # Updated to the new functional Llama 3.3 Versatile model
                     response = client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[
-                            {"role": "system", "content": "You are a strict Nigerian educational expert. Always return responses in valid JSON format."},
+                            {"role": "system", "content": "You are a highly intelligent and strict Chief Examiner for WAEC and NECO. You create rigorous, challenging, and perfectly randomized exam questions. Always return responses in valid JSON format."},
                             {"role": "user", "content": prompt}
                         ],
                         response_format={"type": "json_object"},
-                        temperature=0.2
+                        temperature=0.7 # Increased from 0.2 to 0.7 to force better randomization and varied question generation
                     )
                     
                     generated_text = response.choices[0].message.content
@@ -171,7 +174,7 @@ elif choice == "AI Question Generator":
                         })
                     
                     st.session_state["temp_generated"] = pd.DataFrame(new_qs)
-                    st.success("Done!")
+                    st.success("High-quality randomized questions generated successfully!")
                 except Exception as e:
                     st.error(f"Groq API Error: {e}")
                     
