@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import json
 import random
+import streamlit.components.v1 as components
 from groq import Groq
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
@@ -85,7 +86,7 @@ if choice == "Subject Settings":
                 st.warning(f"'{sub_to_edit}' removed from list configuration.")
                 st.rerun()
 
-# --- MODULE 1: AI QUESTION GENERATOR (POWERED BY GROQ) ---
+# --- MODULE 1: AI QUESTION GENERATOR ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
     st.caption("Powered by Groq Llama 3.3 (Standard Exam Specification Mode)")
@@ -205,7 +206,7 @@ elif choice == "Manual Input":
             df_quiz.to_csv(DB_FILE, index=False)
             st.success("Added successfully!")
 
-# --- MODULE 3: VIEW QUIZ BANK (WITH SELECTION & DELETE FEATURE) ---
+# --- MODULE 3: VIEW QUIZ BANK ---
 elif choice == "View Quiz Bank":
     st.header("🗂️ Stored Questions Vault")
     
@@ -222,10 +223,8 @@ elif choice == "View Quiz Bank":
         st.subheader("📚 Active Database Records")
         st.caption("💡 **To delete entries:** Check the **'Delete'** box next to any question, then click the red button at the bottom.")
         
-        # Insert a temporary selection column at the front of the displayed dataframe
         filtered.insert(0, "Delete", False)
         
-        # Display an interactive grid allowing checkbox selection
         edited_df = st.data_editor(
             filtered,
             hide_index=False,
@@ -233,17 +232,14 @@ elif choice == "View Quiz Bank":
             disabled=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"]
         )
         
-        # Track original indices of checked items
         indices_to_delete = edited_df[edited_df["Delete"] == True].index
         
         if len(indices_to_delete) > 0:
             st.write("")
             if st.button(f"🗑️ Permanent Delete Selected Questions ({len(indices_to_delete)})", type="primary"):
-                # Drop indices from the persistent global dataframe
                 df_quiz = df_quiz.drop(indices_to_delete).reset_index(drop=True)
                 df_quiz.to_csv(DB_FILE, index=False)
                 st.success("Selected records removed from database successfully!")
-                st.import_data = None
                 st.rerun()
     else:
         st.info("The saved question vault is currently empty.")
@@ -257,6 +253,14 @@ elif choice == "Live Competition Mode":
             st.subheader("Setup Inter-Subject Competition Round")
             
             chosen_type = st.radio("Select Competition Format for this Session", ["Multiple Choice (Objectives)", "Short Answer / Theory"], horizontal=True)
+            
+            st.write("---")
+            st.subheader("⏱️ Timer Settings")
+            use_timer = st.checkbox("Enable Countdown Timer per Question")
+            timer_seconds = 60
+            if use_timer:
+                timer_seconds = st.number_input("Seconds allocated per question:", min_value=10, max_value=300, value=60, step=5)
+            
             st.write("---")
             
             type_filtered_pool = df_quiz[df_quiz["Type"] == chosen_type]
@@ -264,7 +268,7 @@ elif choice == "Live Competition Mode":
             chosen_subjects = st.multiselect("Select Subjects to include in this round", available_subjects)
             
             if chosen_subjects:
-                st.write(f"🔧 Set Question Quantities per Subject ({chosen_type} only):")
+                st.write(f"🔧 Set Question Quantities per Subject:")
                 config_counts = {}
                 
                 for s in chosen_subjects:
@@ -283,6 +287,10 @@ elif choice == "Live Competition Mode":
                         st.session_state.live_questions = round_pool
                         st.session_state.current_q_index = 0
                         st.session_state.show_answer = False
+                        
+                        # Save timer settings to session state
+                        st.session_state.use_timer = use_timer
+                        st.session_state.timer_seconds = timer_seconds
                         st.rerun()
                     else:
                         st.error("Please allocate at least 1 question to start.")
@@ -292,6 +300,32 @@ elif choice == "Live Competition Mode":
             q_list = st.session_state.live_questions
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
+            
+            # --- TIMER INJECTION ---
+            if st.session_state.get("use_timer", False):
+                timer_html = f"""
+                <div style="font-size: 32px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 3px solid #ff4b4b; border-radius: 10px; padding: 15px; margin-bottom: 25px; background-color: #fff1f0;">
+                    <span id="timer_display_{idx}"></span>
+                </div>
+                <script>
+                var timeLeft = {st.session_state.timer_seconds};
+                var elem = document.getElementById('timer_display_{idx}');
+                var timerId = setInterval(countdown, 1000);
+                
+                function countdown() {{
+                    if (timeLeft < 0) {{
+                        clearTimeout(timerId);
+                        elem.innerHTML = "🚨 TIME IS UP! 🚨";
+                    }} else {{
+                        elem.innerHTML = "⏱️ " + timeLeft + "s Remaining";
+                        timeLeft--;
+                    }}
+                }}
+                countdown();
+                </script>
+                """
+                # The unique {idx} ensures the JS completely restarts every time you change questions
+                components.html(timer_html, height=100)
             
             st.markdown("### 🔢 Select Question Number:")
             q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
