@@ -312,7 +312,7 @@ elif choice == "Live Competition Mode":
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
             
-            # 1. QUIZ NUMBER SELECTOR (Moved to the top)
+            # 1. QUIZ NUMBER SELECTOR
             st.markdown("### 🔢 Select Question Number:")
             q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
             chosen_q_label = st.selectbox("Jump to:", q_labels, index=idx, label_visibility="collapsed")
@@ -323,12 +323,12 @@ elif choice == "Live Competition Mode":
                 st.session_state.show_answer = False
                 st.rerun()
             
-            # 2. RESIZED TIMER INJECTION (Moved between the selector and the container)
+            # 2. RESIZED AND TIGHTENED TIMER INJECTION
             current_mode = st.session_state.get("timer_mode", "No Timer")
             
             if current_mode == "Per Question":
                 timer_html = f"""
-                <div style="font-size: 24px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 8px; margin: 5px 0px; background-color: #fff1f0;">
+                <div style="font-size: 24px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 5px; margin: 0px; background-color: #fff1f0;">
                     <span id="timer_display_{idx}"></span>
                 </div>
                 <script>
@@ -348,12 +348,13 @@ elif choice == "Live Competition Mode":
                 countdown();
                 </script>
                 """
-                components.html(timer_html, height=65)
+                # Reduced height to 50
+                components.html(timer_html, height=50)
                 
             elif current_mode == "Entire Session":
                 end_time_ms = st.session_state.get("session_end_time_ms", 0)
                 timer_html = f"""
-                <div style="font-size: 24px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 8px; margin: 5px 0px; background-color: #fff1f0;">
+                <div style="font-size: 24px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 5px; margin: 0px; background-color: #fff1f0;">
                     <span id="global_timer_display"></span>
                 </div>
                 <script>
@@ -377,9 +378,10 @@ elif choice == "Live Competition Mode":
                 setInterval(updateTimer, 1000);
                 </script>
                 """
-                components.html(timer_html, height=65)
+                # Reduced height to 50
+                components.html(timer_html, height=50)
             
-            st.write("---")
+            # Removed the st.write("---") here to kill the gap
             
             # 3. QUESTION CONTAINER 
             st.markdown(f"### 📍 Question Container {idx + 1} of {len(q_list)}")
