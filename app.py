@@ -3,7 +3,7 @@ import pandas as pd
 import os
 import json
 import random
-from groq import Groq  # Switched to Groq
+from groq import Groq
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
@@ -16,7 +16,7 @@ if os.path.exists(DB_FILE):
 else:
     df_quiz = pd.DataFrame(columns=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"])
 
-DEFAULT_SUBJECTS = ["Physics", "Chemistry", "Biology", "General Science", "P.H.E."]
+DEFAULT_SUBJECTS = ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Basic Science", "Agricultural Science"]
 if os.path.exists(SUBJECTS_FILE):
     with open(SUBJECTS_FILE, "r") as f:
         stored_subjects = json.load(f)
@@ -50,7 +50,7 @@ if choice == "Subject Settings":
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("➕ Add New Subject")
-        new_sub = st.text_input("Enter Subject Name", placeholder="e.g., Mathematics, Agricultural Science")
+        new_sub = st.text_input("Enter Subject Name", placeholder="e.g., Further Mathematics, Economics")
         if st.button("Add Subject") and new_sub:
             clean_sub = new_sub.strip()
             if clean_sub not in st.session_state.subjects:
@@ -85,10 +85,10 @@ if choice == "Subject Settings":
                 st.warning(f"'{sub_to_edit}' removed from list configuration.")
                 st.rerun()
 
-# --- MODULE 1: AI QUESTION GENERATOR (POWERED BY GROQ LLAMA 3) ---
+# --- MODULE 1: AI QUESTION GENERATOR (POWERED BY GROQ) ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
-    st.caption("Powered by Groq & Meta Llama 3")
+    st.caption("Powered by Groq Llama 3")
     
     if "GROQ_API_KEY" in st.secrets:
         api_key = st.secrets["GROQ_API_KEY"]
@@ -106,16 +106,15 @@ elif choice == "AI Question Generator":
             num_q = st.slider("Number of Questions", 1, 10, 3)
             
         if st.button("✨ Auto-Generate Questions", type="primary"):
-            with st.spinner("Drafting standard NERDC curriculum questions via Llama 3..."):
+            with st.spinner("Drafting standard NERDC curriculum questions..."):
                 
                 if q_type == "Multiple Choice (Objectives)":
                     prompt = f"""
                     Generate {num_q} standard secondary school level Multiple Choice questions for {subject} on topic: '{topic}'.
                     
                     CURRICULUM ALIGNMENT: 
-                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for Junior Secondary (JSS) or Senior Secondary (SSS) schools.
-                    2. Benchmark the difficulty and syllabus standards against past WAEC, NECO, and JAMB national examinations.
-                    3. If the subject is Physics or Chemistry, ensure half of the questions are word problems requiring numerical calculations.
+                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum covering both Junior Secondary School (JSS) and Senior Secondary School (SSS).
+                    2. Benchmark the difficulty, syllabus standards, and terminology against past WAEC, NECO, and JAMB national examinations.
                     
                     STRICT FORMATTING RULE:
                     - You MUST return a single JSON object containing a root key called "questions".
@@ -123,29 +122,31 @@ elif choice == "AI Question Generator":
                     - The 'Options' field must be a JSON array containing EXACTLY 4 or 5 strings (Never exceed 5). 
                     - Do NOT include labels like 'A)', 'B)' inside the raw options array elements.
                     - The 'Correct Answer' field must map to the final letter indicator matching the element (e.g., 'A) 10 m/s').
+                    - For Mathematics or calculation problems, give the final exact answer in the options.
                     """
                 else:
                     prompt = f"""
                     Generate {num_q} standard secondary school level Short Answer/Theory questions for {subject} on topic: '{topic}'.
                     
                     CURRICULUM ALIGNMENT & STYLE:
-                    1. Align strictly with the Nigerian NERDC curriculum for JSS/SSS.
+                    1. Align strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum covering both Junior Secondary School (JSS) and Senior Secondary School (SSS).
                     2. Benchmark against past WAEC, NECO, and JAMB standards.
-                    3. Frame as direct fill-in-the-blank or single-phrase recall tasks requiring a precise word/value. Avoid 'explanations'.
-                    4. CALCULATION CONSTRAINT: If math/calculations are involved, ask for a final result, and ensure the 'Correct Answer' field contains ONLY the final numerical value with its proper unit (e.g., "120 cm³", "x = 4").
+                    3. Give STRAIGHT DIRECT ANSWERS ONLY to short answer questions. Absolutely no long explanations or extra sentences.
+                    4. CALCULATION CONSTRAINT: For mathematics and calculation problems, provide ONLY the exact final numerical answer with its proper unit (e.g., "120 cm³", "x = 4"). Do NOT show the working steps.
                     
                     STRICT FORMATTING RULE:
                     - You MUST return a single JSON object containing a root key called "questions".
                     - The "questions" key must hold a list of objects with exactly these keys: 'Question', 'Correct Answer'.
-                    - 'Correct Answer' must contain ONLY the short phrase or numerical answer.
+                    - 'Correct Answer' must contain ONLY the short phrase or final numerical answer.
                     - Set 'Options' field as an empty string in your output logic (or leave it out).
                     """
                 
                 try:
-                    # Calling Groq API with Llama 3 70B model and enforcing JSON format
-                    response = client.chat.completions.create(model="llama-3.3-70b-versatile",
+                    # Updated to the new functional Llama 3.3 Versatile model
+                    response = client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
                         messages=[
-                            {"role": "system", "content": "You are a Nigerian educational expert. Always return responses in valid JSON format."},
+                            {"role": "system", "content": "You are a strict Nigerian educational expert. Always return responses in valid JSON format."},
                             {"role": "user", "content": prompt}
                         ],
                         response_format={"type": "json_object"},
@@ -156,7 +157,6 @@ elif choice == "AI Question Generator":
                     generated_data = json.loads(generated_text)
                     
                     new_qs = []
-                    # Safely extract from the required "questions" root key
                     for q in generated_data.get("questions", []):
                         raw_opts = q.get("Options", "")
                         if isinstance(raw_opts, list):
@@ -183,7 +183,7 @@ elif choice == "AI Question Generator":
                 st.success("Committed to database!")
                 del st.session_state["temp_generated"]
     else:
-        st.warning("Please configure your GROQ_API_KEY inside your Streamlit Secrets Panel to activate Llama 3.")
+        st.warning("Please configure your GROQ_API_KEY inside your Streamlit Secrets Panel.")
 
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
@@ -216,7 +216,7 @@ elif choice == "View Quiz Bank":
     else:
         st.info("No questions stored yet.")
 
-# --- MODULE 4: LIVE COMPETITION MODE (MOBILE LAYOUT FIX) ---
+# --- MODULE 4: LIVE COMPETITION MODE ---
 elif choice == "Live Competition Mode":
     st.header("🎬 Grand Arena - Competition Screen")
     
