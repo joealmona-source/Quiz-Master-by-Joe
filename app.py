@@ -143,8 +143,7 @@ elif choice == "AI Question Generator":
                 
                 try:
                     # Calling Groq API with Llama 3 70B model and enforcing JSON format
-                    response = client.chat.completions.create(
-                        model="llama3-70b-8192",
+                    response = client.chat.completions.create(model="llama-3.3-70b-versatile",
                         messages=[
                             {"role": "system", "content": "You are a Nigerian educational expert. Always return responses in valid JSON format."},
                             {"role": "user", "content": prompt}
