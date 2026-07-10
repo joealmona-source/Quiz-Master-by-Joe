@@ -3,8 +3,7 @@ import pandas as pd
 import os
 import json
 import random
-from google import genai
-from google.genai import types
+from groq import Groq  # Switched to Groq
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
@@ -86,17 +85,18 @@ if choice == "Subject Settings":
                 st.warning(f"'{sub_to_edit}' removed from list configuration.")
                 st.rerun()
 
-# --- MODULE 1: AI QUESTION GENERATOR ---
+# --- MODULE 1: AI QUESTION GENERATOR (POWERED BY GROQ LLAMA 3) ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
+    st.caption("Powered by Groq & Meta Llama 3")
     
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
+    if "GROQ_API_KEY" in st.secrets:
+        api_key = st.secrets["GROQ_API_KEY"]
     else:
         api_key = None
     
     if api_key:
-        client = genai.Client(api_key=api_key)
+        client = Groq(api_key=api_key)
         col1, col2 = st.columns(2)
         with col1:
             subject = st.selectbox("Subject", st.session_state.subjects)
@@ -106,7 +106,7 @@ elif choice == "AI Question Generator":
             num_q = st.slider("Number of Questions", 1, 10, 3)
             
         if st.button("✨ Auto-Generate Questions", type="primary"):
-            with st.spinner("Drafting standard NERDC curriculum questions..."):
+            with st.spinner("Drafting standard NERDC curriculum questions via Llama 3..."):
                 
                 if q_type == "Multiple Choice (Objectives)":
                     prompt = f"""
@@ -114,40 +114,51 @@ elif choice == "AI Question Generator":
                     
                     CURRICULUM ALIGNMENT: 
                     1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for Junior Secondary (JSS) or Senior Secondary (SSS) schools.
-                    2. Benchmark difficulty and syllabus standards against past WAEC, NECO, and JAMB national exams. No outrageous or abstract university-level questions.
-                    3. If the subject involves math or calculations (like Mathematics, Physics, or Chemistry), ensure at least half of the questions are calculation problems.
+                    2. Benchmark the difficulty and syllabus standards against past WAEC, NECO, and JAMB national examinations.
+                    3. If the subject is Physics or Chemistry, ensure half of the questions are word problems requiring numerical calculations.
                     
                     STRICT FORMATTING RULE:
-                    - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Options', 'Correct Answer'.
-                    - The 'Options' field must be a JSON array containing EXACTLY 4 or 5 strings max (Never exceed Option E). 
+                    - You MUST return a single JSON object containing a root key called "questions".
+                    - The "questions" key must hold a list of objects with exactly these keys: 'Question', 'Options', 'Correct Answer'.
+                    - The 'Options' field must be a JSON array containing EXACTLY 4 or 5 strings (Never exceed 5). 
                     - Do NOT include labels like 'A)', 'B)' inside the raw options array elements.
-                    - The 'Correct Answer' field must map to the final letter indicator with its value matching a chosen element (e.g., 'A) 10 m/s').
+                    - The 'Correct Answer' field must map to the final letter indicator matching the element (e.g., 'A) 10 m/s').
                     """
                 else:
                     prompt = f"""
                     Generate {num_q} standard secondary school level Short Answer/Theory questions for {subject} on topic: '{topic}'.
                     
                     CURRICULUM ALIGNMENT & STYLE:
-                    1. Align strictly with the NERDC curriculum for JSS/SSS, benchmarked against WAEC, NECO, and JAMB.
-                    2. STYLE CONSTRAINT: Frame the questions as direct fill-in-the-blank or single-phrase recall tasks where only a single straight word, phrase, or exact numerical value is required. Avoid 'explanations' or full-sentence responses.
-                       - Example Question: "The ability of living things to respond to stimuli is termed ___"
-                       - Example Correct Answer: "Irritability"
-                    3. CALCULATION CONSTRAINT: For Mathematics, Physics, Chemistry, or any calculation problem, the question must ask for a final result, and the 'Correct Answer' field must contain ONLY the absolute final numerical value with its proper unit. Do NOT include any formulas, derivation steps, working out, or text explanations.
-                       - Example Calculation Answer: "120 cm³" or "25 Hz" or "x = 4"
+                    1. Align strictly with the Nigerian NERDC curriculum for JSS/SSS.
+                    2. Benchmark against past WAEC, NECO, and JAMB standards.
+                    3. Frame as direct fill-in-the-blank or single-phrase recall tasks requiring a precise word/value. Avoid 'explanations'.
+                    4. CALCULATION CONSTRAINT: If math/calculations are involved, ask for a final result, and ensure the 'Correct Answer' field contains ONLY the final numerical value with its proper unit (e.g., "120 cm³", "x = 4").
                     
                     STRICT FORMATTING RULE:
-                    - Return STRICTLY as a JSON list of objects with keys: 'Question', 'Correct Answer'. Options field should be an empty string.
+                    - You MUST return a single JSON object containing a root key called "questions".
+                    - The "questions" key must hold a list of objects with exactly these keys: 'Question', 'Correct Answer'.
+                    - 'Correct Answer' must contain ONLY the short phrase or numerical answer.
+                    - Set 'Options' field as an empty string in your output logic (or leave it out).
                     """
                 
                 try:
-                    # Updated model parameter to use the stable production flash identifier
-                    response = client.models.generate_content(
-                        model='gemini-2.0-flash', contents=prompt,
-                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    # Calling Groq API with Llama 3 70B model and enforcing JSON format
+                    response = client.chat.completions.create(
+                        model="llama3-70b-8192",
+                        messages=[
+                            {"role": "system", "content": "You are a Nigerian educational expert. Always return responses in valid JSON format."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.2
                     )
-                    generated_data = json.loads(response.text)
+                    
+                    generated_text = response.choices[0].message.content
+                    generated_data = json.loads(generated_text)
+                    
                     new_qs = []
-                    for q in generated_data:
+                    # Safely extract from the required "questions" root key
+                    for q in generated_data.get("questions", []):
                         raw_opts = q.get("Options", "")
                         if isinstance(raw_opts, list):
                             raw_opts = raw_opts[:5]
@@ -157,12 +168,13 @@ elif choice == "AI Question Generator":
                             
                         new_qs.append({
                             "Subject": subject, "Topic": topic, "Type": q_type,
-                            "Question": q["Question"], "Options": opts_str, "Correct Answer": q["Correct Answer"]
+                            "Question": q.get("Question", ""), "Options": opts_str, "Correct Answer": q.get("Correct Answer", "")
                         })
+                    
                     st.session_state["temp_generated"] = pd.DataFrame(new_qs)
                     st.success("Done!")
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"Groq API Error: {e}")
                     
         if "temp_generated" in st.session_state:
             st.dataframe(st.session_state["temp_generated"], use_container_width=True)
@@ -172,7 +184,7 @@ elif choice == "AI Question Generator":
                 st.success("Committed to database!")
                 del st.session_state["temp_generated"]
     else:
-        st.warning("Please configure your GEMINI_API_KEY inside your Streamlit Secrets Panel to activate.")
+        st.warning("Please configure your GROQ_API_KEY inside your Streamlit Secrets Panel to activate Llama 3.")
 
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
@@ -205,7 +217,7 @@ elif choice == "View Quiz Bank":
     else:
         st.info("No questions stored yet.")
 
-# --- MODULE 4: LIVE COMPETITION MODE ---
+# --- MODULE 4: LIVE COMPETITION MODE (MOBILE LAYOUT FIX) ---
 elif choice == "Live Competition Mode":
     st.header("🎬 Grand Arena - Competition Screen")
     
@@ -250,17 +262,15 @@ elif choice == "Live Competition Mode":
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
             
-            st.markdown("### 🔢 Choose / Jump to Question Number:")
-            num_columns = 5
-            grid_cols = st.columns(num_columns) 
+            st.markdown("### 🔢 Select Question Number:")
+            q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
+            chosen_q_label = st.selectbox("Jump to:", q_labels, index=idx, label_visibility="collapsed")
+            new_idx = q_labels.index(chosen_q_label)
             
-            for i in range(len(q_list)):
-                col_target = grid_cols[i % num_columns]
-                btn_label = f"⭐ {i+1}" if i == idx else f"{i+1}"
-                if col_target.button(btn_label, key=f"nav_btn_{i}", use_container_width=True):
-                    st.session_state.current_q_index = i
-                    st.session_state.show_answer = False
-                    st.rerun()
+            if new_idx != idx:
+                st.session_state.current_q_index = new_idx
+                st.session_state.show_answer = False
+                st.rerun()
             
             st.write("---")
             
@@ -288,27 +298,27 @@ elif choice == "Live Competition Mode":
             
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                if st.button("👁️ Show/Hide Answer"):
+                if st.button("👁️ Show/Hide Answer", use_container_width=True):
                     st.session_state.show_answer = not st.session_state.show_answer
             with c2:
-                if st.button("⬅️ Previous") and idx > 0:
+                if st.button("⬅️ Previous", use_container_width=True) and idx > 0:
                     st.session_state.current_q_index -= 1
                     st.session_state.show_answer = False
                     st.rerun()
             with c3:
-                if st.button("➡️ Next") and idx < len(q_list) - 1:
+                if st.button("➡️ Next", use_container_width=True) and idx < len(q_list) - 1:
                     st.session_state.current_q_index += 1
                     st.session_state.show_answer = False
                     st.rerun()
             with c4:
-                if st.button("❌ Terminate Round"):
+                if st.button("❌ Terminate Round", use_container_width=True):
                     st.session_state.live_questions = []
                     st.session_state.current_q_index = 0
                     st.session_state.show_answer = False
                     st.rerun()
             
             if st.session_state.show_answer:
-                label = "Correct Option" if current_q['Type'] == "Multiple Choice (Objectives)" else "Expected Short Answer"
+                label = "Correct Option" if current_q['Type'] == "Multiple Choice (Objectives)" else "Expected Points/Rubric"
                 st.success(f"**{label}:** {current_q['Correct Answer']}")
                 
     else:
