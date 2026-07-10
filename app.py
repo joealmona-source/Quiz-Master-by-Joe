@@ -312,12 +312,23 @@ elif choice == "Live Competition Mode":
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
             
-            # --- TIMER INJECTION ---
+            # 1. QUIZ NUMBER SELECTOR (Moved to the top)
+            st.markdown("### 🔢 Select Question Number:")
+            q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
+            chosen_q_label = st.selectbox("Jump to:", q_labels, index=idx, label_visibility="collapsed")
+            new_idx = q_labels.index(chosen_q_label)
+            
+            if new_idx != idx:
+                st.session_state.current_q_index = new_idx
+                st.session_state.show_answer = False
+                st.rerun()
+            
+            # 2. RESIZED TIMER INJECTION (Moved between the selector and the container)
             current_mode = st.session_state.get("timer_mode", "No Timer")
             
             if current_mode == "Per Question":
                 timer_html = f"""
-                <div style="font-size: 32px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 3px solid #ff4b4b; border-radius: 10px; padding: 15px; margin-bottom: 25px; background-color: #fff1f0;">
+                <div style="font-size: 24px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 8px; margin: 5px 0px; background-color: #fff1f0;">
                     <span id="timer_display_{idx}"></span>
                 </div>
                 <script>
@@ -328,21 +339,21 @@ elif choice == "Live Competition Mode":
                 function countdown() {{
                     if (timeLeft <= 0) {{
                         clearTimeout(timerId);
-                        elem.innerHTML = "🚨 TIME IS UP! 🚨";
+                        elem.innerHTML = "🚨 TIME UP! 🚨";
                     }} else {{
-                        elem.innerHTML = "⏱️ " + timeLeft + "s Remaining";
+                        elem.innerHTML = "⏱️ " + timeLeft + "s";
                         timeLeft--;
                     }}
                 }}
                 countdown();
                 </script>
                 """
-                components.html(timer_html, height=100)
+                components.html(timer_html, height=65)
                 
             elif current_mode == "Entire Session":
                 end_time_ms = st.session_state.get("session_end_time_ms", 0)
                 timer_html = f"""
-                <div style="font-size: 32px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 3px solid #ff4b4b; border-radius: 10px; padding: 15px; margin-bottom: 25px; background-color: #fff1f0;">
+                <div style="font-size: 24px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 8px; margin: 5px 0px; background-color: #fff1f0;">
                     <span id="global_timer_display"></span>
                 </div>
                 <script>
@@ -354,32 +365,23 @@ elif choice == "Live Competition Mode":
                     var timeLeft = Math.floor((endTime - now) / 1000);
                     
                     if (timeLeft <= 0) {{
-                        elem.innerHTML = "🚨 SESSION TIME IS UP! 🚨";
+                        elem.innerHTML = "🚨 SESSION TIME UP! 🚨";
                     }} else {{
                         var minutes = Math.floor(timeLeft / 60);
                         var seconds = timeLeft % 60;
                         var formattedTime = minutes + "m " + (seconds < 10 ? "0" : "") + seconds + "s";
-                        elem.innerHTML = "⏱️ Session Timer: " + formattedTime;
+                        elem.innerHTML = "⏱️ " + formattedTime;
                     }}
                 }}
                 updateTimer(); // run immediately
                 setInterval(updateTimer, 1000);
                 </script>
                 """
-                components.html(timer_html, height=100)
-            
-            st.markdown("### 🔢 Select Question Number:")
-            q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
-            chosen_q_label = st.selectbox("Jump to:", q_labels, index=idx, label_visibility="collapsed")
-            new_idx = q_labels.index(chosen_q_label)
-            
-            if new_idx != idx:
-                st.session_state.current_q_index = new_idx
-                st.session_state.show_answer = False
-                st.rerun()
+                components.html(timer_html, height=65)
             
             st.write("---")
             
+            # 3. QUESTION CONTAINER 
             st.markdown(f"### 📍 Question Container {idx + 1} of {len(q_list)}")
             st.info(f"**Subject Category:** {current_q['Subject']} | **Topic Field:** {current_q['Topic']} | **Format:** {current_q['Type']}")
             
