@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import json
 import random
+import time
 import streamlit.components.v1 as components
 from groq import Groq
 
@@ -256,10 +257,15 @@ elif choice == "Live Competition Mode":
             
             st.write("---")
             st.subheader("⏱️ Timer Settings")
-            use_timer = st.checkbox("Enable Countdown Timer per Question")
+            timer_mode = st.radio("Select Timer Format:", ["No Timer", "Per Question", "Entire Session"], horizontal=True)
+            
             timer_seconds = 60
-            if use_timer:
+            timer_minutes = 10
+            
+            if timer_mode == "Per Question":
                 timer_seconds = st.number_input("Seconds allocated per question:", min_value=10, max_value=300, value=60, step=5)
+            elif timer_mode == "Entire Session":
+                timer_minutes = st.number_input("Total minutes allocated for the whole round:", min_value=1, max_value=180, value=10, step=1)
             
             st.write("---")
             
@@ -289,8 +295,13 @@ elif choice == "Live Competition Mode":
                         st.session_state.show_answer = False
                         
                         # Save timer settings to session state
-                        st.session_state.use_timer = use_timer
-                        st.session_state.timer_seconds = timer_seconds
+                        st.session_state.timer_mode = timer_mode
+                        if timer_mode == "Per Question":
+                            st.session_state.timer_seconds = timer_seconds
+                        elif timer_mode == "Entire Session":
+                            # Calculate the absolute end time in milliseconds
+                            st.session_state.session_end_time_ms = int(time.time() * 1000) + (timer_minutes * 60 * 1000)
+                            
                         st.rerun()
                     else:
                         st.error("Please allocate at least 1 question to start.")
@@ -302,18 +313,20 @@ elif choice == "Live Competition Mode":
             current_q = q_list[idx]
             
             # --- TIMER INJECTION ---
-            if st.session_state.get("use_timer", False):
+            current_mode = st.session_state.get("timer_mode", "No Timer")
+            
+            if current_mode == "Per Question":
                 timer_html = f"""
                 <div style="font-size: 32px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 3px solid #ff4b4b; border-radius: 10px; padding: 15px; margin-bottom: 25px; background-color: #fff1f0;">
                     <span id="timer_display_{idx}"></span>
                 </div>
                 <script>
-                var timeLeft = {st.session_state.timer_seconds};
+                var timeLeft = {st.session_state.get('timer_seconds', 60)};
                 var elem = document.getElementById('timer_display_{idx}');
                 var timerId = setInterval(countdown, 1000);
                 
                 function countdown() {{
-                    if (timeLeft < 0) {{
+                    if (timeLeft <= 0) {{
                         clearTimeout(timerId);
                         elem.innerHTML = "🚨 TIME IS UP! 🚨";
                     }} else {{
@@ -324,7 +337,35 @@ elif choice == "Live Competition Mode":
                 countdown();
                 </script>
                 """
-                # The unique {idx} ensures the JS completely restarts every time you change questions
+                components.html(timer_html, height=100)
+                
+            elif current_mode == "Entire Session":
+                end_time_ms = st.session_state.get("session_end_time_ms", 0)
+                timer_html = f"""
+                <div style="font-size: 32px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 3px solid #ff4b4b; border-radius: 10px; padding: 15px; margin-bottom: 25px; background-color: #fff1f0;">
+                    <span id="global_timer_display"></span>
+                </div>
+                <script>
+                var endTime = {end_time_ms};
+                var elem = document.getElementById('global_timer_display');
+                
+                function updateTimer() {{
+                    var now = Date.now();
+                    var timeLeft = Math.floor((endTime - now) / 1000);
+                    
+                    if (timeLeft <= 0) {{
+                        elem.innerHTML = "🚨 SESSION TIME IS UP! 🚨";
+                    }} else {{
+                        var minutes = Math.floor(timeLeft / 60);
+                        var seconds = timeLeft % 60;
+                        var formattedTime = minutes + "m " + (seconds < 10 ? "0" : "") + seconds + "s";
+                        elem.innerHTML = "⏱️ Session Timer: " + formattedTime;
+                    }}
+                }}
+                updateTimer(); // run immediately
+                setInterval(updateTimer, 1000);
+                </script>
+                """
                 components.html(timer_html, height=100)
             
             st.markdown("### 🔢 Select Question Number:")
