@@ -88,7 +88,7 @@ if choice == "Subject Settings":
 # --- MODULE 1: AI QUESTION GENERATOR (POWERED BY GROQ) ---
 elif choice == "AI Question Generator":
     st.header("🤖 AI-Assisted Question Generator")
-    st.caption("Powered by Groq Llama 3.3 (Chief Examiner Mode)")
+    st.caption("Powered by Groq Llama 3.3 (Standard Exam Specification Mode)")
     
     if "GROQ_API_KEY" in st.secrets:
         api_key = st.secrets["GROQ_API_KEY"]
@@ -112,15 +112,14 @@ elif choice == "AI Question Generator":
                     prompt = f"""
                     Generate {num_q} standard secondary school level Multiple Choice questions for {subject} on topic: '{topic}'.
                     
-                    QUALITY & CURRICULUM RULES: 
-                    1. Align strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum for JSS and SSS.
-                    2. Benchmark difficulty against past WAEC, NECO, and JAMB standards. 
-                    3. Do NOT ask basic, trivial recall questions. Questions MUST test higher-order thinking, practical application, and deep conceptual understanding.
-                    4. For Mathematics or Science subjects, ensure standard exam terminology and standard SI units are used perfectly.
+                    CURRICULUM & EXAM ALIGNMENT: 
+                    1. Align the questions strictly with the Nigerian Educational Research and Development Council (NERDC) curriculum.
+                    2. For Senior Secondary level subjects, model the style, depth, and structural tone exactly after past WAEC, NECO, and JAMB UTME national examinations.
+                    3. For Junior Secondary level subjects, model the style exactly after Basic Education Certificate Examination (B.E.C.E) standards.
+                    4. Maintain a realistic and balanced mix of conceptual, theoretical, and calculation-based questions as found in actual national papers. Do not tilt heavily into complex calculations unless explicitly required by the topic, and never generate dubious, unrealistic, or outrageous scenarios.
                     
                     STRICT RANDOMIZATION RULE:
-                    - You MUST heavily randomize which option contains the correct answer. 
-                    - It is unacceptable for 'A' to be the correct answer for multiple questions in a row. Shuffle the correct answer evenly across the 1st, 2nd, 3rd, and 4th positions.
+                    - You MUST heavily randomize which option contains the correct answer. It is unacceptable for 'A' to be the correct answer for multiple questions in a row. Shuffle the correct answer evenly across the 1st, 2nd, 3rd, and 4th positions.
                     
                     JSON FORMATTING RULE:
                     - Return a single JSON object with a root key "questions".
@@ -132,11 +131,12 @@ elif choice == "AI Question Generator":
                     prompt = f"""
                     Generate {num_q} standard secondary school level Short Answer/Theory questions for {subject} on topic: '{topic}'.
                     
-                    QUALITY & CURRICULUM RULES:
-                    1. Align strictly with the NERDC curriculum for JSS and SSS.
-                    2. Benchmark against past WAEC, NECO, and JAMB standards. Do not generate overly simplistic questions. Test real understanding and application.
-                    3. Give STRAIGHT DIRECT ANSWERS ONLY to the short answer questions. Do not include long explanations, preambles, or extra sentences.
-                    4. CALCULATION CONSTRAINT: For any mathematics or calculation problems, provide ONLY the final exact numerical answer with its proper unit (e.g., "120 cm³", "x = 4"). Do NOT show the working steps.
+                    CURRICULUM & EXAM ALIGNMENT:
+                    1. Align strictly with the NERDC curriculum.
+                    2. Model questions after WAEC, NECO, and JAMB standards for Senior Secondary level, and B.E.C.E standards for Junior Secondary level.
+                    3. Ensure the questions are clean, clear, and realistic—avoid dubious, overly convoluted, or outrageous framing. Maintain a balanced approach between theoretical concepts and practical core knowledge.
+                    4. Give STRAIGHT DIRECT ANSWERS ONLY to the short answer questions. Do not include long explanations, preambles, or extra sentences.
+                    5. CALCULATION CONSTRAINT: For any calculation problems, provide ONLY the exact final numerical answer with its proper unit (e.g., "120 cm³", "x = 4"). Do NOT show the working steps.
                     
                     JSON FORMATTING RULE:
                     - Return a single JSON object with a root key "questions".
@@ -149,11 +149,11 @@ elif choice == "AI Question Generator":
                     response = client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[
-                            {"role": "system", "content": "You are a highly intelligent and strict Chief Examiner for WAEC and NECO. You create rigorous, challenging, and perfectly randomized exam questions. Always return responses in valid JSON format."},
+                            {"role": "system", "content": "You are a highly intelligent and meticulous Chief Examiner for Nigerian national exam boards (WAEC, NECO, JAMB, BECE). You produce clear, highly accurate, standard-compliant exam items based on the NERDC curriculum. Always return responses in valid JSON format."},
                             {"role": "user", "content": prompt}
                         ],
                         response_format={"type": "json_object"},
-                        temperature=0.7 # Increased from 0.2 to 0.7 to force better randomization and varied question generation
+                        temperature=0.65
                     )
                     
                     generated_text = response.choices[0].message.content
@@ -174,7 +174,7 @@ elif choice == "AI Question Generator":
                         })
                     
                     st.session_state["temp_generated"] = pd.DataFrame(new_qs)
-                    st.success("High-quality randomized questions generated successfully!")
+                    st.success("Standard-compliant questions generated successfully!")
                 except Exception as e:
                     st.error(f"Groq API Error: {e}")
                     
@@ -205,19 +205,48 @@ elif choice == "Manual Input":
             df_quiz.to_csv(DB_FILE, index=False)
             st.success("Added successfully!")
 
-# --- MODULE 3: VIEW QUIZ BANK ---
+# --- MODULE 3: VIEW QUIZ BANK (WITH SELECTION & DELETE FEATURE) ---
 elif choice == "View Quiz Bank":
     st.header("🗂️ Stored Questions Vault")
+    
     if not df_quiz.empty:
         col1, col2 = st.columns(2)
-        with col1: sub_filter = st.multiselect("Filter by Subject", df_quiz["Subject"].unique())
-        with col2: type_filter = st.multiselect("Filter by Category", df_quiz["Type"].unique())
-        filtered = df_quiz
+        with col1: sub_filter = st.multiselect("Filter View by Subject", df_quiz["Subject"].unique())
+        with col2: type_filter = st.multiselect("Filter View by Category", df_quiz["Type"].unique())
+        
+        filtered = df_quiz.copy()
         if sub_filter: filtered = filtered[filtered["Subject"].isin(sub_filter)]
         if type_filter: filtered = filtered[filtered["Type"].isin(type_filter)]
-        st.dataframe(filtered, use_container_width=True)
+        
+        st.write("---")
+        st.subheader("📚 Active Database Records")
+        st.caption("💡 **To delete entries:** Check the **'Delete'** box next to any question, then click the red button at the bottom.")
+        
+        # Insert a temporary selection column at the front of the displayed dataframe
+        filtered.insert(0, "Delete", False)
+        
+        # Display an interactive grid allowing checkbox selection
+        edited_df = st.data_editor(
+            filtered,
+            hide_index=False,
+            use_container_width=True,
+            disabled=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"]
+        )
+        
+        # Track original indices of checked items
+        indices_to_delete = edited_df[edited_df["Delete"] == True].index
+        
+        if len(indices_to_delete) > 0:
+            st.write("")
+            if st.button(f"🗑️ Permanent Delete Selected Questions ({len(indices_to_delete)})", type="primary"):
+                # Drop indices from the persistent global dataframe
+                df_quiz = df_quiz.drop(indices_to_delete).reset_index(drop=True)
+                df_quiz.to_csv(DB_FILE, index=False)
+                st.success("Selected records removed from database successfully!")
+                st.import_data = None
+                st.rerun()
     else:
-        st.info("No questions stored yet.")
+        st.info("The saved question vault is currently empty.")
 
 # --- MODULE 4: LIVE COMPETITION MODE ---
 elif choice == "Live Competition Mode":
