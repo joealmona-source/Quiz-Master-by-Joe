@@ -9,6 +9,37 @@ from groq import Groq
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
+# --- CUSTOM COMPACT CSS ---
+# This CSS strips out Streamlit's default bulky whitespace to force everything into a single tablet screen view.
+st.markdown("""
+    <style>
+    /* Reduce top and bottom padding for the main app container */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0.5rem !important;
+    }
+    /* Reduce gap between all vertical elements */
+    div[data-testid="stVerticalBlock"] {
+        gap: 0.3rem !important;
+    }
+    /* Compact the buttons on the bottom navigation bar */
+    .stButton > button {
+        padding: 0px 5px !important;
+        min-height: 2rem !important;
+    }
+    /* Compact the dropdown selector */
+    div[data-testid="stSelectbox"] div[role="combobox"] {
+        min-height: 2.2rem !important;
+        padding-bottom: 2px !important;
+        padding-top: 2px !important;
+    }
+    /* Reduce margins around standard markdown text */
+    p {
+        margin-bottom: 0.2rem !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 DB_FILE = "quiz_database.csv"
 SUBJECTS_FILE = "subjects_list.json"
 
@@ -220,10 +251,7 @@ elif choice == "View Quiz Bank":
         if sub_filter: filtered = filtered[filtered["Subject"].isin(sub_filter)]
         if type_filter: filtered = filtered[filtered["Type"].isin(type_filter)]
         
-        st.write("---")
         st.subheader("📚 Active Database Records")
-        st.caption("💡 **To delete entries:** Check the **'Delete'** box next to any question, then click the red button at the bottom.")
-        
         filtered.insert(0, "Delete", False)
         
         edited_df = st.data_editor(
@@ -236,7 +264,6 @@ elif choice == "View Quiz Bank":
         indices_to_delete = edited_df[edited_df["Delete"] == True].index
         
         if len(indices_to_delete) > 0:
-            st.write("")
             if st.button(f"🗑️ Permanent Delete Selected Questions ({len(indices_to_delete)})", type="primary"):
                 df_quiz = df_quiz.drop(indices_to_delete).reset_index(drop=True)
                 df_quiz.to_csv(DB_FILE, index=False)
@@ -247,10 +274,10 @@ elif choice == "View Quiz Bank":
 
 # --- MODULE 4: LIVE COMPETITION MODE ---
 elif choice == "Live Competition Mode":
-    st.header("🎬 Grand Arena - Competition Screen")
     
     if not df_quiz.empty:
         if len(st.session_state.live_questions) == 0:
+            st.header("🎬 Grand Arena - Setup")
             st.subheader("Setup Inter-Subject Competition Round")
             
             chosen_type = st.radio("Select Competition Format for this Session", ["Multiple Choice (Objectives)", "Short Answer / Theory"], horizontal=True)
@@ -294,12 +321,10 @@ elif choice == "Live Competition Mode":
                         st.session_state.current_q_index = 0
                         st.session_state.show_answer = False
                         
-                        # Save timer settings to session state
                         st.session_state.timer_mode = timer_mode
                         if timer_mode == "Per Question":
                             st.session_state.timer_seconds = timer_seconds
                         elif timer_mode == "Entire Session":
-                            # Calculate the absolute end time in milliseconds
                             st.session_state.session_end_time_ms = int(time.time() * 1000) + (timer_minutes * 60 * 1000)
                             
                         st.rerun()
@@ -308,12 +333,12 @@ elif choice == "Live Competition Mode":
             elif len(available_subjects) == 0:
                 st.warning(f"There are no questions in the database categorized as '{chosen_type}' yet.")
         else:
+            # COMPACT LIVE VIEW 
             q_list = st.session_state.live_questions
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
             
-            # 1. QUIZ NUMBER SELECTOR
-            st.markdown("### 🔢 Select Question Number:")
+            # 1. QUIZ NUMBER SELECTOR (Compact)
             q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
             chosen_q_label = st.selectbox("Jump to:", q_labels, index=idx, label_visibility="collapsed")
             new_idx = q_labels.index(chosen_q_label)
@@ -323,80 +348,62 @@ elif choice == "Live Competition Mode":
                 st.session_state.show_answer = False
                 st.rerun()
             
-            # 2. RESIZED AND TIGHTENED TIMER INJECTION
+            # 2. ULTRA-COMPACT TIMER INJECTION
             current_mode = st.session_state.get("timer_mode", "No Timer")
             
             if current_mode == "Per Question":
                 timer_html = f"""
-                <div style="font-size: 24px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 5px; margin: 0px; background-color: #fff1f0;">
+                <div style="font-size: 20px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 6px; padding: 2px; margin: 0px; background-color: #fff1f0; line-height: 1;">
                     <span id="timer_display_{idx}"></span>
                 </div>
                 <script>
                 var timeLeft = {st.session_state.get('timer_seconds', 60)};
                 var elem = document.getElementById('timer_display_{idx}');
                 var timerId = setInterval(countdown, 1000);
-                
                 function countdown() {{
-                    if (timeLeft <= 0) {{
-                        clearTimeout(timerId);
-                        elem.innerHTML = "🚨 TIME UP! 🚨";
-                    }} else {{
-                        elem.innerHTML = "⏱️ " + timeLeft + "s";
-                        timeLeft--;
-                    }}
+                    if (timeLeft <= 0) {{ clearTimeout(timerId); elem.innerHTML = "🚨 TIME UP!"; }}
+                    else {{ elem.innerHTML = "⏱️ " + timeLeft + "s"; timeLeft--; }}
                 }}
                 countdown();
                 </script>
                 """
-                # Reduced height to 50
-                components.html(timer_html, height=50)
+                components.html(timer_html, height=35)
                 
             elif current_mode == "Entire Session":
                 end_time_ms = st.session_state.get("session_end_time_ms", 0)
                 timer_html = f"""
-                <div style="font-size: 24px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 5px; margin: 0px; background-color: #fff1f0;">
+                <div style="font-size: 20px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 6px; padding: 2px; margin: 0px; background-color: #fff1f0; line-height: 1;">
                     <span id="global_timer_display"></span>
                 </div>
                 <script>
                 var endTime = {end_time_ms};
                 var elem = document.getElementById('global_timer_display');
-                
                 function updateTimer() {{
-                    var now = Date.now();
-                    var timeLeft = Math.floor((endTime - now) / 1000);
-                    
-                    if (timeLeft <= 0) {{
-                        elem.innerHTML = "🚨 SESSION TIME UP! 🚨";
-                    }} else {{
-                        var minutes = Math.floor(timeLeft / 60);
-                        var seconds = timeLeft % 60;
-                        var formattedTime = minutes + "m " + (seconds < 10 ? "0" : "") + seconds + "s";
-                        elem.innerHTML = "⏱️ " + formattedTime;
+                    var timeLeft = Math.floor((endTime - Date.now()) / 1000);
+                    if (timeLeft <= 0) {{ elem.innerHTML = "🚨 TIME UP!"; }} 
+                    else {{
+                        var m = Math.floor(timeLeft / 60); var s = timeLeft % 60;
+                        elem.innerHTML = "⏱️ " + m + "m " + (s < 10 ? "0" : "") + s + "s";
                     }}
                 }}
-                updateTimer(); // run immediately
-                setInterval(updateTimer, 1000);
+                updateTimer(); setInterval(updateTimer, 1000);
                 </script>
                 """
-                # Reduced height to 50
-                components.html(timer_html, height=50)
+                components.html(timer_html, height=35)
             
-            # Removed the st.write("---") here to kill the gap
+            # 3. COMPACT QUESTION CONTAINER 
+            st.markdown(f"<div style='background-color: #1e293b; padding: 8px; border-radius: 6px; margin-bottom: 5px;'><span style='color: #38bdf8; font-weight: bold;'>📍 Q{idx + 1}/{len(q_list)}:</span> <span style='color: #e2e8f0; font-size: 0.9em;'>{current_q['Subject']} | {current_q['Topic']}</span></div>", unsafe_allow_html=True)
             
-            # 3. QUESTION CONTAINER 
-            st.markdown(f"### 📍 Question Container {idx + 1} of {len(q_list)}")
-            st.info(f"**Subject Category:** {current_q['Subject']} | **Topic Field:** {current_q['Topic']} | **Format:** {current_q['Type']}")
+            # Render question text slightly smaller but legible to save lines
+            st.markdown(f"<div style='font-size: 1.15rem; font-weight: bold; line-height: 1.4; margin-bottom: 10px;'>{str(current_q['Question'])}</div>", unsafe_allow_html=True)
             
-            st.subheader(str(current_q['Question']))
-            
+            # 4. COMPACT OPTIONS
             if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and str(current_q['Options']).strip() != "":
                 options_split = str(current_q['Options']).split(",")
                 prefixes = ["A)", "B)", "C)", "D)", "E)"]
                 
                 for index, option in enumerate(options_split):
-                    if index >= len(prefixes):
-                        break
-                        
+                    if index >= len(prefixes): break
                     clean_opt = option.strip()
                     if any(clean_opt.startswith(p) for p in prefixes):
                         st.markdown(f"**🔹 {clean_opt}**")
@@ -404,32 +411,32 @@ elif choice == "Live Competition Mode":
                         pref = prefixes[index]
                         st.markdown(f"**🔹 {pref} {clean_opt}**")
             
-            st.write("---")
+            st.write("") # tiny spacer
             
+            # 5. BOTTOM NAVIGATION BAR
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                if st.button("👁️ Show/Hide Answer", use_container_width=True):
+                if st.button("👁️ Show Ans", use_container_width=True):
                     st.session_state.show_answer = not st.session_state.show_answer
             with c2:
-                if st.button("⬅️ Previous", use_container_width=True) and idx > 0:
+                if st.button("⬅️ Prev", use_container_width=True) and idx > 0:
                     st.session_state.current_q_index -= 1
                     st.session_state.show_answer = False
                     st.rerun()
             with c3:
-                if st.button("➡️ Next", use_container_width=True) and idx < len(q_list) - 1:
+                if st.button("Next ➡️", use_container_width=True) and idx < len(q_list) - 1:
                     st.session_state.current_q_index += 1
                     st.session_state.show_answer = False
                     st.rerun()
             with c4:
-                if st.button("❌ Terminate Round", use_container_width=True):
+                if st.button("❌ End", use_container_width=True):
                     st.session_state.live_questions = []
                     st.session_state.current_q_index = 0
                     st.session_state.show_answer = False
                     st.rerun()
             
             if st.session_state.show_answer:
-                label = "Correct Option" if current_q['Type'] == "Multiple Choice (Objectives)" else "Expected Points/Rubric"
-                st.success(f"**{label}:** {current_q['Correct Answer']}")
+                st.success(f"**Ans:** {current_q['Correct Answer']}")
                 
     else:
         st.info("The database is currently empty.")
