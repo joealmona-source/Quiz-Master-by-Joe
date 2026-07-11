@@ -9,33 +9,28 @@ from groq import Groq
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
-# --- CUSTOM COMPACT CSS ---
-# This CSS strips out Streamlit's default bulky whitespace to force everything into a single tablet screen view.
+# --- CUSTOM BALANCED CSS ---
+# Restored safe paddings to prevent trimmed headings and crushed elements.
 st.markdown("""
     <style>
-    /* Reduce top and bottom padding for the main app container */
+    /* Safe top padding so the sidebar and page titles don't get cut off */
     .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 0.5rem !important;
+        padding-top: 3rem !important; 
+        padding-bottom: 2rem !important;
     }
-    /* Reduce gap between all vertical elements */
+    /* Relaxed gap so elements have breathing room but remain compact */
     div[data-testid="stVerticalBlock"] {
-        gap: 0.3rem !important;
+        gap: 0.8rem !important;
     }
-    /* Compact the buttons on the bottom navigation bar */
+    /* Balanced button sizes */
     .stButton > button {
-        padding: 0px 5px !important;
-        min-height: 2rem !important;
+        padding: 0.4rem 0.8rem !important;
+        min-height: 2.5rem !important;
+        border-radius: 6px !important;
     }
-    /* Compact the dropdown selector */
+    /* Compact the dropdown selector without squashing it */
     div[data-testid="stSelectbox"] div[role="combobox"] {
-        min-height: 2.2rem !important;
-        padding-bottom: 2px !important;
-        padding-top: 2px !important;
-    }
-    /* Reduce margins around standard markdown text */
-    p {
-        margin-bottom: 0.2rem !important;
+        min-height: 2.5rem !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -333,12 +328,12 @@ elif choice == "Live Competition Mode":
             elif len(available_subjects) == 0:
                 st.warning(f"There are no questions in the database categorized as '{chosen_type}' yet.")
         else:
-            # COMPACT LIVE VIEW 
+            # COMPACT YET BALANCED LIVE VIEW 
             q_list = st.session_state.live_questions
             idx = st.session_state.current_q_index
             current_q = q_list[idx]
             
-            # 1. QUIZ NUMBER SELECTOR (Compact)
+            # 1. QUIZ NUMBER SELECTOR
             q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
             chosen_q_label = st.selectbox("Jump to:", q_labels, index=idx, label_visibility="collapsed")
             new_idx = q_labels.index(chosen_q_label)
@@ -348,12 +343,14 @@ elif choice == "Live Competition Mode":
                 st.session_state.show_answer = False
                 st.rerun()
             
-            # 2. ULTRA-COMPACT TIMER INJECTION
+            st.write("") # Tiny spacer below dropdown
+            
+            # 2. BALANCED TIMER INJECTION
             current_mode = st.session_state.get("timer_mode", "No Timer")
             
             if current_mode == "Per Question":
                 timer_html = f"""
-                <div style="font-size: 20px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 6px; padding: 2px; margin: 0px; background-color: #fff1f0; line-height: 1;">
+                <div style="font-size: 22px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 6px; margin-bottom: 15px; background-color: #fff1f0; line-height: 1;">
                     <span id="timer_display_{idx}"></span>
                 </div>
                 <script>
@@ -367,12 +364,12 @@ elif choice == "Live Competition Mode":
                 countdown();
                 </script>
                 """
-                components.html(timer_html, height=35)
+                components.html(timer_html, height=45)
                 
             elif current_mode == "Entire Session":
                 end_time_ms = st.session_state.get("session_end_time_ms", 0)
                 timer_html = f"""
-                <div style="font-size: 20px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 6px; padding: 2px; margin: 0px; background-color: #fff1f0; line-height: 1;">
+                <div style="font-size: 22px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 6px; margin-bottom: 15px; background-color: #fff1f0; line-height: 1;">
                     <span id="global_timer_display"></span>
                 </div>
                 <script>
@@ -389,15 +386,20 @@ elif choice == "Live Competition Mode":
                 updateTimer(); setInterval(updateTimer, 1000);
                 </script>
                 """
-                components.html(timer_html, height=35)
+                components.html(timer_html, height=45)
             
-            # 3. COMPACT QUESTION CONTAINER 
-            st.markdown(f"<div style='background-color: #1e293b; padding: 8px; border-radius: 6px; margin-bottom: 5px;'><span style='color: #38bdf8; font-weight: bold;'>📍 Q{idx + 1}/{len(q_list)}:</span> <span style='color: #e2e8f0; font-size: 0.9em;'>{current_q['Subject']} | {current_q['Topic']}</span></div>", unsafe_allow_html=True)
+            # 3. BALANCED QUESTION CONTAINER (Improved Paddings)
+            st.markdown(f"""
+                <div style='background-color: #1e293b; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px;'>
+                    <span style='color: #38bdf8; font-weight: bold; font-size: 1.1rem;'>📍 Q{idx + 1}/{len(q_list)}:</span> 
+                    <span style='color: #e2e8f0; font-size: 1rem;'>{current_q['Subject']} | {current_q['Topic']}</span>
+                </div>
+            """, unsafe_allow_html=True)
             
-            # Render question text slightly smaller but legible to save lines
-            st.markdown(f"<div style='font-size: 1.15rem; font-weight: bold; line-height: 1.4; margin-bottom: 10px;'>{str(current_q['Question'])}</div>", unsafe_allow_html=True)
+            # Question Text - Slightly larger and comfortably spaced
+            st.markdown(f"<div style='font-size: 1.25rem; font-weight: 500; line-height: 1.5; margin-bottom: 20px;'>{str(current_q['Question'])}</div>", unsafe_allow_html=True)
             
-            # 4. COMPACT OPTIONS
+            # 4. SPACED OPTIONS
             if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and str(current_q['Options']).strip() != "":
                 options_split = str(current_q['Options']).split(",")
                 prefixes = ["A)", "B)", "C)", "D)", "E)"]
@@ -405,13 +407,15 @@ elif choice == "Live Competition Mode":
                 for index, option in enumerate(options_split):
                     if index >= len(prefixes): break
                     clean_opt = option.strip()
+                    
+                    # Giving options standard markdown spacing instead of cramming them
                     if any(clean_opt.startswith(p) for p in prefixes):
                         st.markdown(f"**🔹 {clean_opt}**")
                     else:
                         pref = prefixes[index]
                         st.markdown(f"**🔹 {pref} {clean_opt}**")
             
-            st.write("") # tiny spacer
+            st.write("---") # Visual divider before buttons
             
             # 5. BOTTOM NAVIGATION BAR
             c1, c2, c3, c4 = st.columns(4)
