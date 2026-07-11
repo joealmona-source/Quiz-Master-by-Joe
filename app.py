@@ -9,29 +9,27 @@ from groq import Groq
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
-# --- CUSTOM ULTRA-COMPACT CSS ---
+# --- CUSTOM BALANCED CSS ---
 st.markdown("""
     <style>
-    /* Aggressively reduce top padding so nothing is cut off */
+    /* Safe top padding so the sidebar and page titles don't get cut off */
     .block-container {
-        padding-top: 2rem !important; 
-        padding-bottom: 1rem !important;
+        padding-top: 3rem !important; 
+        padding-bottom: 2rem !important;
     }
-    /* Squeeze vertical blocks together */
+    /* Relaxed gap so elements have breathing room but remain compact */
     div[data-testid="stVerticalBlock"] {
-        gap: 0.2rem !important;
+        gap: 0.8rem !important;
     }
-    /* Compact the buttons */
+    /* Balanced button sizes */
     .stButton > button {
-        padding: 0.2rem 0.5rem !important;
-        min-height: 2rem !important;
+        padding: 0.4rem 0.8rem !important;
+        min-height: 2.5rem !important;
         border-radius: 6px !important;
     }
-    /* Compact the jump-to dropdown */
+    /* Compact the dropdown selector without squashing it */
     div[data-testid="stSelectbox"] div[role="combobox"] {
-        min-height: 2.2rem !important;
-        padding-top: 2px !important;
-        padding-bottom: 2px !important;
+        min-height: 2.5rem !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -61,8 +59,6 @@ if "current_q_index" not in st.session_state:
     st.session_state.current_q_index = 0
 if "show_answer" not in st.session_state:
     st.session_state.show_answer = False
-    
-# STRICT STATE TRACKER: "setup", "countdown", or "live"
 if "quiz_state" not in st.session_state:
     st.session_state.quiz_state = "setup"
 
@@ -275,13 +271,8 @@ elif choice == "View Quiz Bank":
 # --- MODULE 4: LIVE COMPETITION MODE ---
 elif choice == "Live Competition Mode":
     
-    if df_quiz.empty:
-        st.info("The database is currently empty.")
-    else:
-        # ==========================================
-        # STATE 1: SETUP SCREEN
-        # ==========================================
-        if st.session_state.quiz_state == "setup":
+    if not df_quiz.empty:
+        if len(st.session_state.live_questions) == 0:
             st.header("🎬 Grand Arena - Setup")
             st.subheader("Setup Inter-Subject Competition Round")
             
@@ -308,9 +299,10 @@ elif choice == "Live Competition Mode":
             if chosen_subjects:
                 st.write(f"🔧 Set Question Quantities per Subject:")
                 config_counts = {}
+                
                 for s in chosen_subjects:
                     max_avail = len(type_filtered_pool[type_filtered_pool["Subject"] == s])
-                    config_counts[s] = st.number_input(f"Number from '{s}' (Max: {max_avail})", min_value=0, max_value=max_avail, value=min(2, max_avail))
+                    config_counts[s] = st.number_input(f"Number of questions from '{s}' (Max: {max_avail})", min_value=0, max_value=max_avail, value=min(2, max_avail))
                 
                 if st.button("🚀 Compile and Randomize Game Show Pool", type="primary"):
                     round_pool = []
@@ -321,169 +313,174 @@ elif choice == "Live Competition Mode":
                     
                     if round_pool:
                         random.shuffle(round_pool)
-                        # Save config to state
                         st.session_state.live_questions = round_pool
                         st.session_state.current_q_index = 0
                         st.session_state.show_answer = False
+                        
                         st.session_state.timer_mode = timer_mode
                         if timer_mode == "Per Question":
                             st.session_state.timer_seconds = timer_seconds
                         elif timer_mode == "Entire Session":
                             st.session_state.timer_minutes = timer_minutes
-                        
-                        # TRIGGER THE COUNTDOWN STATE
+                            
+                        # Trigger the Ready, Set, Go screen
                         st.session_state.quiz_state = "countdown"
                         st.rerun()
                     else:
                         st.error("Please allocate at least 1 question to start.")
             elif len(available_subjects) == 0:
-                st.warning(f"No '{chosen_type}' questions available.")
-
-        # ==========================================
-        # STATE 2: ISOLATED COUNTDOWN SCREEN
-        # ==========================================
-        elif st.session_state.quiz_state == "countdown":
-            placeholder = st.empty()
-            
-            # Initial "GET READY"
-            with placeholder.container():
-                st.markdown("<h1 style='text-align: center; font-size: 5rem; margin-top: 15vh;'>GET READY</h1>", unsafe_allow_html=True)
-            time.sleep(1.2)
-            
-            # Number Loop
-            for i in [3, 2, 1]:
-                placeholder.empty()
-                with placeholder.container():
-                    st.markdown(f"<h1 style='text-align: center; font-size: 10rem; color: #ff4b4b; margin-top: 10vh;'>{i}</h1>", unsafe_allow_html=True)
+                st.warning(f"There are no questions in the database categorized as '{chosen_type}' yet.")
+                
+        else:
+            # --- COUNTDOWN INTERSTITIAL SCREEN ---
+            if st.session_state.quiz_state == "countdown":
+                placeholder = st.empty()
+                
+                # 3, 2, 1 Loop
+                for i in [3, 2, 1]:
+                    placeholder.markdown(f"""
+                        <div style='display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh;'>
+                            <h1 style='font-size: 4rem; color: #e2e8f0; margin-bottom: 0px;'>GET READY</h1>
+                            <h1 style='font-size: 8rem; color: #ff4b4b; margin-top: 10px;'>{i}</h1>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    time.sleep(1)
+                
+                # GO!
+                placeholder.markdown("""
+                    <div style='display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh;'>
+                        <h1 style='font-size: 10rem; color: #38bdf8; margin: 0;'>GO! 🚀</h1>
+                    </div>
+                """, unsafe_allow_html=True)
                 time.sleep(1)
-            
-            # GO!
-            placeholder.empty()
-            with placeholder.container():
-                st.markdown("<h1 style='text-align: center; font-size: 10rem; color: #38bdf8; margin-top: 10vh;'>GO! 🚀</h1>", unsafe_allow_html=True)
-            time.sleep(1)
-            
-            # Clean up and start live quiz
-            placeholder.empty()
-            st.session_state.quiz_state = "live"
-            
-            # Set global timer right before entering live mode so time isn't wasted during countdown
-            if st.session_state.get("timer_mode") == "Entire Session":
-                st.session_state.session_end_time_ms = int(time.time() * 1000) + (st.session_state.timer_minutes * 60 * 1000)
                 
-            st.rerun()
+                # Move to live state and start the global timer if applicable
+                st.session_state.quiz_state = "live"
+                if st.session_state.get("timer_mode") == "Entire Session":
+                    st.session_state.session_end_time_ms = int(time.time() * 1000) + (st.session_state.timer_minutes * 60 * 1000)
+                st.rerun()
 
-        # ==========================================
-        # STATE 3: LIVE QUIZ SCREEN
-        # ==========================================
-        elif st.session_state.quiz_state == "live":
-            q_list = st.session_state.live_questions
-            idx = st.session_state.current_q_index
-            current_q = q_list[idx]
-            
-            # 1. TOP BAR: Selector and Restart Button
-            top_c1, top_c2 = st.columns([4, 1])
-            with top_c1:
-                q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
-                chosen_q_label = st.selectbox("Jump to:", q_labels, index=idx, label_visibility="collapsed")
-                new_idx = q_labels.index(chosen_q_label)
-                if new_idx != idx:
-                    st.session_state.current_q_index = new_idx
-                    st.session_state.show_answer = False
-                    st.rerun()
-            with top_c2:
-                if st.button("🔄 Restart", use_container_width=True, help="Repeat exact same quiz session"):
-                    st.session_state.current_q_index = 0
-                    st.session_state.show_answer = False
-                    st.session_state.quiz_state = "countdown"
-                    st.rerun()
-            
-            # 2. ULTRA-COMPACT TIMER INJECTION
-            current_mode = st.session_state.get("timer_mode", "No Timer")
-            if current_mode == "Per Question":
-                timer_html = f"""
-                <div style="font-size: 20px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 6px; padding: 2px; margin-top: 2px; margin-bottom: 5px; background-color: #fff1f0; line-height: 1;">
-                    <span id="timer_display_{idx}"></span>
-                </div>
-                <script>
-                var timeLeft = {st.session_state.get('timer_seconds', 60)};
-                var elem = document.getElementById('timer_display_{idx}');
-                var timerId = setInterval(countdown, 1000);
-                function countdown() {{
-                    if (timeLeft <= 0) {{ clearTimeout(timerId); elem.innerHTML = "🚨 TIME UP!"; }}
-                    else {{ elem.innerHTML = "⏱️ " + timeLeft + "s"; timeLeft--; }}
-                }}
-                countdown();
-                </script>
-                """
-                components.html(timer_html, height=35)
+            # --- MAIN LIVE VIEW ---
+            elif st.session_state.quiz_state == "live":
+                q_list = st.session_state.live_questions
+                idx = st.session_state.current_q_index
+                current_q = q_list[idx]
                 
-            elif current_mode == "Entire Session":
-                end_time_ms = st.session_state.get("session_end_time_ms", 0)
-                timer_html = f"""
-                <div style="font-size: 20px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 6px; padding: 2px; margin-top: 2px; margin-bottom: 5px; background-color: #fff1f0; line-height: 1;">
-                    <span id="global_timer_display"></span>
-                </div>
-                <script>
-                var endTime = {end_time_ms};
-                var elem = document.getElementById('global_timer_display');
-                function updateTimer() {{
-                    var timeLeft = Math.floor((endTime - Date.now()) / 1000);
-                    if (timeLeft <= 0) {{ elem.innerHTML = "🚨 TIME UP!"; }} 
-                    else {{
-                        var m = Math.floor(timeLeft / 60); var s = timeLeft % 60;
-                        elem.innerHTML = "⏱️ " + m + "m " + (s < 10 ? "0" : "") + s + "s";
+                # 1. TOP CONTROLS (Jump Selector & Restart Button)
+                top_c1, top_c2 = st.columns([4, 1])
+                with top_c1:
+                    q_labels = [f"Question {i+1} {'⭐ (Current)' if i == idx else ''}" for i in range(len(q_list))]
+                    chosen_q_label = st.selectbox("Jump to:", q_labels, index=idx, label_visibility="collapsed")
+                    new_idx = q_labels.index(chosen_q_label)
+                    
+                    if new_idx != idx:
+                        st.session_state.current_q_index = new_idx
+                        st.session_state.show_answer = False
+                        st.rerun()
+                with top_c2:
+                    if st.button("🔄 Restart Round", use_container_width=True, help="Repeat this exact quiz session and reset the timer"):
+                        st.session_state.current_q_index = 0
+                        st.session_state.show_answer = False
+                        st.session_state.quiz_state = "countdown" # Triggers the countdown again!
+                        st.rerun()
+                
+                st.write("") # Tiny spacer below dropdown
+                
+                # 2. BALANCED TIMER INJECTION
+                current_mode = st.session_state.get("timer_mode", "No Timer")
+                
+                if current_mode == "Per Question":
+                    timer_html = f"""
+                    <div style="font-size: 22px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 6px; margin-bottom: 15px; background-color: #fff1f0; line-height: 1;">
+                        <span id="timer_display_{idx}"></span>
+                    </div>
+                    <script>
+                    var timeLeft = {st.session_state.get('timer_seconds', 60)};
+                    var elem = document.getElementById('timer_display_{idx}');
+                    var timerId = setInterval(countdown, 1000);
+                    function countdown() {{
+                        if (timeLeft <= 0) {{ clearTimeout(timerId); elem.innerHTML = "🚨 TIME UP!"; }}
+                        else {{ elem.innerHTML = "⏱️ " + timeLeft + "s"; timeLeft--; }}
                     }}
-                }}
-                updateTimer(); setInterval(updateTimer, 1000);
-                </script>
-                """
-                components.html(timer_html, height=35)
-            
-            # 3. QUESTION BOX
-            st.markdown(f"<div style='background-color: #1e293b; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px;'><span style='color: #38bdf8; font-weight: bold;'>📍 Q{idx + 1}/{len(q_list)}:</span> <span style='color: #e2e8f0; font-size: 0.9em;'>{current_q['Subject']} | {current_q['Topic']}</span></div>", unsafe_allow_html=True)
-            
-            st.markdown(f"<div style='font-size: 1.2rem; font-weight: bold; line-height: 1.4; margin-bottom: 8px;'>{str(current_q['Question'])}</div>", unsafe_allow_html=True)
-            
-            # 4. COMPACT HTML OPTIONS (Strips out default Streamlit paragraph spacing)
-            if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and str(current_q['Options']).strip() != "":
-                options_split = str(current_q['Options']).split(",")
-                prefixes = ["A)", "B)", "C)", "D)", "E)"]
+                    countdown();
+                    </script>
+                    """
+                    components.html(timer_html, height=45)
+                    
+                elif current_mode == "Entire Session":
+                    end_time_ms = st.session_state.get("session_end_time_ms", 0)
+                    timer_html = f"""
+                    <div style="font-size: 22px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 6px; margin-bottom: 15px; background-color: #fff1f0; line-height: 1;">
+                        <span id="global_timer_display"></span>
+                    </div>
+                    <script>
+                    var endTime = {end_time_ms};
+                    var elem = document.getElementById('global_timer_display');
+                    function updateTimer() {{
+                        var timeLeft = Math.floor((endTime - Date.now()) / 1000);
+                        if (timeLeft <= 0) {{ elem.innerHTML = "🚨 TIME UP!"; }} 
+                        else {{
+                            var m = Math.floor(timeLeft / 60); var s = timeLeft % 60;
+                            elem.innerHTML = "⏱️ " + m + "m " + (s < 10 ? "0" : "") + s + "s";
+                        }}
+                    }}
+                    updateTimer(); setInterval(updateTimer, 1000);
+                    </script>
+                    """
+                    components.html(timer_html, height=45)
                 
-                options_html = "<div style='margin-bottom: 10px;'>"
-                for index, option in enumerate(options_split):
-                    if index >= len(prefixes): break
-                    clean_opt = option.strip()
-                    if any(clean_opt.startswith(p) for p in prefixes):
-                        options_html += f"<div style='font-size: 1.1rem; font-weight: 500; margin-bottom: 4px; color: #e2e8f0;'>🔹 {clean_opt}</div>"
-                    else:
-                        pref = prefixes[index]
-                        options_html += f"<div style='font-size: 1.1rem; font-weight: 500; margin-bottom: 4px; color: #e2e8f0;'>🔹 {pref} {clean_opt}</div>"
-                options_html += "</div>"
-                st.markdown(options_html, unsafe_allow_html=True)
-            
-            # 5. BOTTOM NAVIGATION BAR
-            c1, c2, c3, c4 = st.columns(4)
-            with c1:
-                if st.button("👁️ Show Ans", use_container_width=True):
-                    st.session_state.show_answer = not st.session_state.show_answer
-            with c2:
-                if st.button("⬅️ Prev", use_container_width=True) and idx > 0:
-                    st.session_state.current_q_index -= 1
-                    st.session_state.show_answer = False
-                    st.rerun()
-            with c3:
-                if st.button("Next ➡️", use_container_width=True) and idx < len(q_list) - 1:
-                    st.session_state.current_q_index += 1
-                    st.session_state.show_answer = False
-                    st.rerun()
-            with c4:
-                if st.button("❌ End Game", use_container_width=True):
-                    st.session_state.live_questions = []
-                    st.session_state.current_q_index = 0
-                    st.session_state.show_answer = False
-                    st.session_state.quiz_state = "setup"
-                    st.rerun()
-            
-            if st.session_state.show_answer:
-                st.success(f"**Ans:** {current_q['Correct Answer']}")
+                # 3. BALANCED QUESTION CONTAINER
+                st.markdown(f"""
+                    <div style='background-color: #1e293b; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px;'>
+                        <span style='color: #38bdf8; font-weight: bold; font-size: 1.1rem;'>📍 Q{idx + 1}/{len(q_list)}:</span> 
+                        <span style='color: #e2e8f0; font-size: 1rem;'>{current_q['Subject']} | {current_q['Topic']}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"<div style='font-size: 1.25rem; font-weight: 500; line-height: 1.5; margin-bottom: 20px;'>{str(current_q['Question'])}</div>", unsafe_allow_html=True)
+                
+                # 4. SPACED OPTIONS
+                if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and str(current_q['Options']).strip() != "":
+                    options_split = str(current_q['Options']).split(",")
+                    prefixes = ["A)", "B)", "C)", "D)", "E)"]
+                    
+                    for index, option in enumerate(options_split):
+                        if index >= len(prefixes): break
+                        clean_opt = option.strip()
+                        
+                        if any(clean_opt.startswith(p) for p in prefixes):
+                            st.markdown(f"**🔹 {clean_opt}**")
+                        else:
+                            pref = prefixes[index]
+                            st.markdown(f"**🔹 {pref} {clean_opt}**")
+                
+                st.write("---") # Visual divider before buttons
+                
+                # 5. BOTTOM NAVIGATION BAR
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    if st.button("👁️ Show Ans", use_container_width=True):
+                        st.session_state.show_answer = not st.session_state.show_answer
+                with c2:
+                    if st.button("⬅️ Prev", use_container_width=True) and idx > 0:
+                        st.session_state.current_q_index -= 1
+                        st.session_state.show_answer = False
+                        st.rerun()
+                with c3:
+                    if st.button("Next ➡️", use_container_width=True) and idx < len(q_list) - 1:
+                        st.session_state.current_q_index += 1
+                        st.session_state.show_answer = False
+                        st.rerun()
+                with c4:
+                    if st.button("❌ End Game", use_container_width=True):
+                        st.session_state.live_questions = []
+                        st.session_state.current_q_index = 0
+                        st.session_state.show_answer = False
+                        st.session_state.quiz_state = "setup"
+                        st.rerun()
+                
+                if st.session_state.show_answer:
+                    st.success(f"**Ans:** {current_q['Correct Answer']}")
+                    
+    else:
+        st.info("The database is currently empty.")
