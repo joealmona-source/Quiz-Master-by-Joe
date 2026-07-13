@@ -71,10 +71,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- LOAD QUESTIONS DATABASE ---
 try:
-    # Force Streamlit to cache the sheet data in memory for 10 minutes
-df_quiz = conn.read(spreadsheet=st.secrets["connections"]["gsheets"]["spreadsheet"], 
-    ttl="10m")
-
+    # Read questions from Google Sheets with 0-second cache time to ensure live updates
+    df_quiz = conn.read(worksheet="Questions", ttl="0d")
     df_quiz = df_quiz.dropna(how="all")
 except Exception as e:
     df_quiz = pd.DataFrame(columns=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"])
@@ -110,10 +108,6 @@ def save_subjects():
 st.sidebar.title("🏆 Quiz Control Panel")
 menu = ["AI Question Generator", "Manual Input", "View Quiz Bank", "Subject Settings", "Live Competition Mode"]
 choice = st.sidebar.selectbox("Go to Module", menu)
-if st.sidebar.button("🔄 Sync Google Sheets Data", use_container_width=True):
-    st.cache_data.clear()
-    st.success("Database synchronized!")
-    st.rerun()
 
 # --- MODULE: SUBJECT SETTINGS ---
 if choice == "Subject Settings":
