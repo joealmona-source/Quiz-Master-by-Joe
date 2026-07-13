@@ -9,6 +9,37 @@ from groq import Groq
 from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
+# --- SYSTEM INITIALIZATION & SESSION STATE ---
+
+if "live_questions" not in st.session_state:
+    st.session_state.live_questions = []
+
+if "current_q_index" not in st.session_state:
+    st.session_state.current_q_index = 0
+
+if "show_answer" not in st.session_state:
+    st.session_state.show_answer = False
+
+if "quiz_state" not in st.session_state:
+    st.session_state.quiz_state = "setup"
+
+# --- DYNAMIC SUBJECT LOADING ---
+SUBJECTS_FILE = "subjects_list.json"
+DEFAULT_SUBJECTS = ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Basic Science", "Agricultural Science"]
+
+# Look for saved subjects first
+if os.path.exists(SUBJECTS_FILE):
+    with open(SUBJECTS_FILE, "r") as f:
+        try:
+            stored_subjects = json.load(f)
+        except json.JSONDecodeError:
+            stored_subjects = DEFAULT_SUBJECTS
+else:
+    stored_subjects = DEFAULT_SUBJECTS
+
+# Initialize session state with the saved dynamic list
+if "subjects" not in st.session_state:
+    st.session_state.subjects = stored_subjects
 
 # --- CUSTOM BALANCED CSS ---
 st.markdown("""
