@@ -71,8 +71,11 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- LOAD QUESTIONS DATABASE ---
 try:
-    # Read questions from Google Sheets with 10-munites cache time to ensure live updates
-    df_quiz = conn.read(worksheet="Questions", ttl="10m")
+    # Force Streamlit to cache the sheet data in memory for 10 minutes
+df_quiz = conn.read(
+    spreadsheet=st.secrets["connections"]["gsheets"]["spreadsheet"], 
+    ttl="10m"
+)
     df_quiz = df_quiz.dropna(how="all")
 except Exception as e:
     df_quiz = pd.DataFrame(columns=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"])
