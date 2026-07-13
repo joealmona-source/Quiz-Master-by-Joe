@@ -6,6 +6,7 @@ import random
 import time
 import streamlit.components.v1 as components
 from groq import Groq
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
@@ -34,37 +35,43 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-DB_FILE = "quiz_database.csv"
-SUBJECTS_FILE = "subjects_list.json"
+# --- GOOGLE SHEETS CONNECTION ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- SYSTEM INITIALIZATION ---
-if os.path.exists(DB_FILE):
-    df_quiz = pd.read_csv(DB_FILE)
-else:
+# --- LOAD QUESTIONS DATABASE ---
+try:
+    # Read questions from Google Sheets with 0-second cache time to ensure live updates
+    df_quiz = conn.read(worksheet="Questions", ttl="0d")
+    df_quiz = df_quiz.dropna(how="all")
+except Exception as e:
     df_quiz = pd.DataFrame(columns=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"])
 
+# Ensure all expected columns are present
+for col in ["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"]:
+    if col not in df_quiz.columns:
+        df_quiz[col] = None
+
+# --- LOAD SUBJECTS ---
 DEFAULT_SUBJECTS = ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Basic Science", "Agricultural Science"]
-if os.path.exists(SUBJECTS_FILE):
-    with open(SUBJECTS_FILE, "r") as f:
-        stored_subjects = json.load(f)
-else:
+try:
+    df_subjects = conn.read(worksheet="Subjects", ttl="0d")
+    df_subjects = df_subjects.dropna(how="all")
+    if not df_subjects.empty and "Subjects" in df_subjects.columns:
+        stored_subjects = df_subjects["Subjects"].dropna().tolist()
+    else:
+        stored_subjects = DEFAULT_SUBJECTS
+except Exception as e:
     stored_subjects = DEFAULT_SUBJECTS
 
 if "subjects" not in st.session_state:
     st.session_state.subjects = stored_subjects
 
-if "live_questions" not in st.session_state:
-    st.session_state.live_questions = []
-if "current_q_index" not in st.session_state:
-    st.session_state.current_q_index = 0
-if "show_answer" not in st.session_state:
-    st.session_state.show_answer = False
-if "quiz_state" not in st.session_state:
-    st.session_state.quiz_state = "setup"
-
 def save_subjects():
-    with open(SUBJECTS_FILE, "w") as f:
-        json.dump(st.session_state.subjects, f)
+    new_sub_df = pd.DataFrame({"Subjects": st.session_state.subjects})
+    try:
+        conn.update(worksheet="Subjects", data=new_sub_df)
+    except Exception as e:
+        st.error(f"Failed to save subjects to Google Sheets: {e}")
 
 # --- SIDEBAR MANAGEMENT ---
 st.sidebar.title("🏆 Quiz Control Panel")
@@ -102,7 +109,10 @@ if choice == "Subject Settings":
                 st.session_state.subjects[idx] = rename_val.strip()
                 if not df_quiz.empty:
                     df_quiz.loc[df_quiz["Subject"] == sub_to_edit, "Subject"] = rename_val.strip()
-                    df_quiz.to_csv(DB_FILE, index=False)
+                    try:
+                        conn.update(worksheet="Questions", data=df_quiz)
+                    except Exception as e:
+                        st.error(f"Failed to update questions in Google Sheets: {e}")
                 save_subjects()
                 st.success("Renamed successfully!")
                 st.rerun()
@@ -211,9 +221,12 @@ elif choice == "AI Question Generator":
             st.dataframe(st.session_state["temp_generated"], use_container_width=True)
             if st.button("💾 Save All Selected to Database"):
                 df_quiz = pd.concat([df_quiz, st.session_state["temp_generated"]], ignore_index=True)
-                df_quiz.to_csv(DB_FILE, index=False)
-                st.success("Committed to database!")
-                del st.session_state["temp_generated"]
+                try:
+                    conn.update(worksheet="Questions", data=df_quiz)
+                    st.success("Committed to database!")
+                    del st.session_state["temp_generated"]
+                except Exception as e:
+                    st.error(f"Failed to save questions to Google Sheets: {e}")
     else:
         st.warning("Please configure your GROQ_API_KEY inside your Streamlit Secrets Panel.")
 
@@ -231,8 +244,11 @@ elif choice == "Manual Input":
         if st.form_submit_button("Save Question"):
             new_row = {"Subject": sub, "Topic": top, "Type": q_type, "Question": q_text, "Options": opts_text, "Correct Answer": ans_text}
             df_quiz = pd.concat([df_quiz, pd.DataFrame([new_row])], ignore_index=True)
-            df_quiz.to_csv(DB_FILE, index=False)
-            st.success("Added successfully!")
+            try:
+                conn.update(worksheet="Questions", data=df_quiz)
+                st.success("Added successfully!")
+            except Exception as e:
+                st.error(f"Failed to save question to Google Sheets: {e}")
 
 # --- MODULE 3: VIEW QUIZ BANK ---
 elif choice == "View Quiz Bank":
@@ -262,9 +278,12 @@ elif choice == "View Quiz Bank":
         if len(indices_to_delete) > 0:
             if st.button(f"🗑️ Permanent Delete Selected Questions ({len(indices_to_delete)})", type="primary"):
                 df_quiz = df_quiz.drop(indices_to_delete).reset_index(drop=True)
-                df_quiz.to_csv(DB_FILE, index=False)
-                st.success("Selected records removed from database successfully!")
-                st.rerun()
+                try:
+                    conn.update(worksheet="Questions", data=df_quiz)
+                    st.success("Selected records removed from database successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to delete records in Google Sheets: {e}")
     else:
         st.info("The saved question vault is currently empty.")
 
@@ -399,7 +418,7 @@ elif choice == "Live Competition Mode":
                     var elem = document.getElementById('timer_display_{idx}');
                     var timerId = setInterval(countdown, 1000);
                     function countdown() {{
-                        if (timeLeft <= 0) {{ clearTimeout(timerId); elem.innerHTML = "🚨 TIME UP!"; }}
+                        if (timeLeft <= 0) {{ clearInterval(timerId); elem.innerHTML = "🚨 TIME UP!"; }}
                         else {{ elem.innerHTML = "⏱️ " + timeLeft + "s"; timeLeft--; }}
                     }}
                     countdown();
