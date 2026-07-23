@@ -280,7 +280,7 @@ elif choice == "AI Question Generator":
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
     st.header("📝 Manual Question Entry")
-    with st.expander("💡 Formatting & Math Cheat Sheet (Click to view)"):
+with st.expander("💡 Formatting & Math Cheat Sheet (Click to view)"):
         st.markdown("""
         You can format your questions directly in the text boxes below. The app will automatically render the formatting during the Live Quiz!
         
