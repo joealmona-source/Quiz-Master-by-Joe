@@ -370,13 +370,16 @@ elif choice == "Live Competition Mode":
             st.subheader("⏱️ Timer Settings")
             timer_mode = st.radio("Select Timer Format:", ["No Timer", "Per Question", "Entire Session"], horizontal=True)
             
+            # Default values (in seconds)
             timer_seconds = 60
-            timer_minutes = 10
+            session_total_seconds = 600
             
             if timer_mode == "Per Question":
-                timer_seconds = st.number_input("Seconds allocated per question:", min_value=10, max_value=300, value=60, step=5)
+                # Changed minimum to 1 second and step to 1
+                timer_seconds = st.number_input("Seconds allocated per question:", min_value=1, max_value=3600, value=60, step=1)
             elif timer_mode == "Entire Session":
-                timer_minutes = st.number_input("Total minutes allocated for the whole round:", min_value=1, max_value=180, value=10, step=1)
+                # Changed from minutes to seconds, minimum to 1 second, and step to 1
+                session_total_seconds = st.number_input("Total seconds allocated for the whole round:", min_value=1, max_value=10800, value=600, step=1)
             
             st.write("---")
             
@@ -409,7 +412,8 @@ elif choice == "Live Competition Mode":
                         if timer_mode == "Per Question":
                             st.session_state.timer_seconds = timer_seconds
                         elif timer_mode == "Entire Session":
-                            st.session_state.timer_minutes = timer_minutes
+                            # Save the new seconds variable instead of minutes
+                            st.session_state.session_total_seconds = session_total_seconds
                             
                         # Trigger the Ready, Set, Go screen
                         st.session_state.quiz_state = "countdown"
@@ -445,7 +449,8 @@ elif choice == "Live Competition Mode":
                 # Move to live state and start the global timer if applicable
                 st.session_state.quiz_state = "live"
                 if st.session_state.get("timer_mode") == "Entire Session":
-                    st.session_state.session_end_time_ms = int(time.time() * 1000) + (st.session_state.timer_minutes * 60 * 1000)
+                    # Removed the * 60 multiplier so it calculates purely in seconds
+                    st.session_state.session_end_time_ms = int(time.time() * 1000) + (st.session_state.session_total_seconds * 1000)
                 st.rerun()
 
             # --- MAIN LIVE VIEW ---
