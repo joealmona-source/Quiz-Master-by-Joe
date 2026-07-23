@@ -106,12 +106,7 @@ def save_subjects():
 
 # --- SIDEBAR MANAGEMENT ---
 st.sidebar.title("🏆 Quiz Control Panel")
-menu = ["AI Question Generator", "Manual Input", "View Quiz Bank", "Subject Settings", "Live Competition Mode"]
-choice = st.sidebar.selectbox("Go to Module", menu)
-# --- SIDEBAR MANAGEMENT ---
-st.sidebar.title("🏆 Quiz Control Panel")
 
-# ADD THIS BLOCK TO MANUALLY PULL FRESH DATA FROM YOUR PHONE'S EDITS
 if st.sidebar.button("🔄 Sync Google Sheets", use_container_width=True):
     st.cache_data.clear()
     st.sidebar.success("App synced with Google Sheets!")
