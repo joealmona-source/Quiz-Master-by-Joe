@@ -280,8 +280,9 @@ elif choice == "AI Question Generator":
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
     st.header("📝 Manual Question Entry")
-with st.expander("💡 Formatting & Math Cheat Sheet (Click to view)"):
-        st.markdown("""
+    
+    with st.expander("💡 Formatting & Math Cheat Sheet (Click to view)"):
+        st.markdown(r"""
         You can format your questions directly in the text boxes below. The app will automatically render the formatting during the Live Quiz!
         
         **Basic Formatting:**
@@ -296,18 +297,24 @@ with st.expander("💡 Formatting & Math Cheat Sheet (Click to view)"):
         """)
 
     q_type = st.radio("Select Category", ["Multiple Choice (Objectives)", "Short Answer / Theory"], horizontal=True)
+    
     with st.form("manual_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
-        with col1: sub = st.selectbox("Subject", st.session_state.subjects)
-        with col2: top = st.text_input("Topic")
+        with col1: 
+            sub = st.selectbox("Subject", st.session_state.subjects)
+        with col2: 
+            top = st.text_input("Topic")
+            
         q_text = st.text_area("Question Text")
         opts_text = st.text_input("Options (Separated by commas, omitting labels)", placeholder="e.g. 20 Hz, 40 Hz, 60 Hz, 80 Hz") if q_type == "Multiple Choice (Objectives)" else ""
         ans_text = st.text_area("Correct Answer (Include label prefix if objective, e.g., A) 20 Hz)")
+        
         if st.form_submit_button("Save Question"):
             new_row = {"Subject": sub, "Topic": top, "Type": q_type, "Question": q_text, "Options": opts_text, "Correct Answer": ans_text}
             df_quiz = pd.concat([df_quiz, pd.DataFrame([new_row])], ignore_index=True)
             try:
                 conn.update(worksheet="Questions", data=df_quiz)
+                st.cache_data.clear() # Clears cache so manually added questions appear instantly
                 st.success("Added successfully!")
             except Exception as e:
                 st.error(f"Failed to save question to Google Sheets: {e}")
