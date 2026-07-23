@@ -188,7 +188,13 @@ elif choice == "AI Question Generator":
         client = Groq(api_key=api_key)
         col1, col2 = st.columns(2)
         with col1:
-            subject = st.selectbox("Subject", st.session_state.subjects)
+            # --- DYNAMIC SUBJECT SYNC ---
+            active_subs = list(st.session_state.subjects)
+            if not df_quiz.empty and "Subject" in df_quiz.columns:
+                active_subs.extend(df_quiz["Subject"].dropna().unique().tolist())
+            active_subs = sorted(list(set([str(s).strip() for s in active_subs if str(s).strip()])))
+            
+            subject = st.selectbox("Subject", active_subs)
             q_type = st.radio("Select Question Category", ["Multiple Choice (Objectives)", "Short Answer / Theory"])
         with col2:
             topic = st.text_input("Topic / Area")
@@ -270,20 +276,18 @@ elif choice == "AI Question Generator":
         if "temp_generated" in st.session_state:
             st.info("💡 **Review and edit the generated questions below.** You can click inside any cell to fix typos or modify the formatting before saving. You can also select rows on the left to delete them entirely.")
             
-            # --- THE MAGIC HAPPENS HERE: Replacing st.dataframe with st.data_editor ---
             edited_df = st.data_editor(
                 st.session_state["temp_generated"], 
                 use_container_width=True,
-                num_rows="dynamic" # This allows you to add or delete rows visually!
+                num_rows="dynamic" 
             )
             
             if st.button("💾 Save Edited Questions to Database"):
-                # Notice we are saving 'edited_df' now, not the original temporary state
                 df_quiz = pd.concat([df_quiz, edited_df], ignore_index=True)
                 try:
                     conn.update(worksheet="Questions", data=df_quiz)
                     st.success("Committed to database!")
-                    st.cache_data.clear() # Clears cache so the new questions appear in your app instantly
+                    st.cache_data.clear() 
                     del st.session_state["temp_generated"]
                     st.rerun()
                 except Exception as e:
@@ -315,7 +319,13 @@ elif choice == "Manual Input":
     with st.form("manual_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1: 
-            sub = st.selectbox("Subject", st.session_state.subjects)
+            # --- DYNAMIC SUBJECT SYNC ---
+            active_subs = list(st.session_state.subjects)
+            if not df_quiz.empty and "Subject" in df_quiz.columns:
+                active_subs.extend(df_quiz["Subject"].dropna().unique().tolist())
+            active_subs = sorted(list(set([str(s).strip() for s in active_subs if str(s).strip()])))
+            
+            sub = st.selectbox("Subject", active_subs)
         with col2: 
             top = st.text_input("Topic")
             
@@ -328,7 +338,7 @@ elif choice == "Manual Input":
             df_quiz = pd.concat([df_quiz, pd.DataFrame([new_row])], ignore_index=True)
             try:
                 conn.update(worksheet="Questions", data=df_quiz)
-                st.cache_data.clear() # Clears cache so manually added questions appear instantly
+                st.cache_data.clear() 
                 st.success("Added successfully!")
             except Exception as e:
                 st.error(f"Failed to save question to Google Sheets: {e}")
