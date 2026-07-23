@@ -254,13 +254,24 @@ elif choice == "AI Question Generator":
                     st.error(f"Groq API Error: {e}")
                     
         if "temp_generated" in st.session_state:
-            st.dataframe(st.session_state["temp_generated"], use_container_width=True)
-            if st.button("💾 Save All Selected to Database"):
-                df_quiz = pd.concat([df_quiz, st.session_state["temp_generated"]], ignore_index=True)
+            st.info("💡 **Review and edit the generated questions below.** You can click inside any cell to fix typos or modify the formatting before saving. You can also select rows on the left to delete them entirely.")
+            
+            # --- THE MAGIC HAPPENS HERE: Replacing st.dataframe with st.data_editor ---
+            edited_df = st.data_editor(
+                st.session_state["temp_generated"], 
+                use_container_width=True,
+                num_rows="dynamic" # This allows you to add or delete rows visually!
+            )
+            
+            if st.button("💾 Save Edited Questions to Database"):
+                # Notice we are saving 'edited_df' now, not the original temporary state
+                df_quiz = pd.concat([df_quiz, edited_df], ignore_index=True)
                 try:
                     conn.update(worksheet="Questions", data=df_quiz)
                     st.success("Committed to database!")
+                    st.cache_data.clear() # Clears cache so the new questions appear in your app instantly
                     del st.session_state["temp_generated"]
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Failed to save questions to Google Sheets: {e}")
     else:
@@ -269,6 +280,21 @@ elif choice == "AI Question Generator":
 # --- MODULE 2: MANUAL INPUT ---
 elif choice == "Manual Input":
     st.header("📝 Manual Question Entry")
+        with st.expander("💡 Formatting & Math Cheat Sheet (Click to view)"):
+        st.markdown("""
+        You can format your questions directly in the text boxes below. The app will automatically render the formatting during the Live Quiz!
+        
+        **Basic Formatting:**
+        * **Bold**: Wrap text in double asterisks ➡️ `**Mass**` becomes **Mass**
+        * **Italic**: Wrap text in single asterisks ➡️ `*Velocity*` becomes *Velocity*
+        * **Underline**: Use HTML tags ➡️ `<u>Define</u>` becomes <u>Define</u>
+        
+        **Science & Math:**
+        * **Subscript (Chemistry)**: Use sub tags ➡️ `H<sub>2</sub>SO<sub>4</sub>` becomes H<sub>2</sub>SO<sub>4</sub>
+        * **Superscript (Math)**: Use sup tags ➡️ `x<sup>2</sup> + y<sup>2</sup>` becomes x<sup>2</sup> + y<sup>2</sup>
+        * **Complex Equations**: Wrap in dollar signs ➡️ `$\frac{1}{2} mv^2$`
+        """)
+
     q_type = st.radio("Select Category", ["Multiple Choice (Objectives)", "Short Answer / Theory"], horizontal=True)
     with st.form("manual_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
