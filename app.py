@@ -101,6 +101,7 @@ def save_subjects():
     new_sub_df = pd.DataFrame({"Subjects": st.session_state.subjects})
     try:
         conn.update(worksheet="Subjects", data=new_sub_df)
+        st.cache_data.clear()  # 👈 CRUCIAL: Forces Streamlit to load fresh subjects on refresh!
     except Exception as e:
         st.error(f"Failed to save subjects to Google Sheets: {e}")
 
@@ -119,6 +120,14 @@ if choice == "Subject Settings":
     st.header("⚙️ Subject Management Dashboard")
     st.caption("Customize your school's curriculum fields dynamically.")
     
+    # Auto-detect and sync any subjects that exist in the Questions database
+    if not df_quiz.empty and "Subject" in df_quiz.columns:
+        quiz_subjects = df_quiz["Subject"].dropna().unique().tolist()
+        for s in quiz_subjects:
+            clean_s = str(s).strip()
+            if clean_s and clean_s not in st.session_state.subjects:
+                st.session_state.subjects.append(clean_s)
+    
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("➕ Add New Subject")
@@ -135,30 +144,35 @@ if choice == "Subject Settings":
                 
     with col2:
         st.subheader("📝 Edit / Remove Existing Subjects")
-        sub_to_edit = st.selectbox("Select Subject to Modify", st.session_state.subjects)
-        
-        edit_col1, edit_col2 = st.columns(2)
-        with edit_col1:
-            rename_val = st.text_input("Rename to:", value=sub_to_edit)
-            if st.button("Rename Subject"):
-                idx = st.session_state.subjects.index(sub_to_edit)
-                st.session_state.subjects[idx] = rename_val.strip()
-                if not df_quiz.empty:
-                    df_quiz.loc[df_quiz["Subject"] == sub_to_edit, "Subject"] = rename_val.strip()
-                    try:
-                        conn.update(worksheet="Questions", data=df_quiz)
-                    except Exception as e:
-                        st.error(f"Failed to update questions in Google Sheets: {e}")
-                save_subjects()
-                st.success("Renamed successfully!")
-                st.rerun()
-        with edit_col2:
-            st.write("Danger Zone:")
-            if st.button("🗑️ Delete Subject", type="primary"):
-                st.session_state.subjects.remove(sub_to_edit)
-                save_subjects()
-                st.warning(f"'{sub_to_edit}' removed from list configuration.")
-                st.rerun()
+        if st.session_state.subjects:
+            sub_to_edit = st.selectbox("Select Subject to Modify", sorted(st.session_state.subjects))
+            
+            edit_col1, edit_col2 = st.columns(2)
+            with edit_col1:
+                rename_val = st.text_input("Rename to:", value=sub_to_edit)
+                if st.button("Rename Subject"):
+                    new_name = rename_val.strip()
+                    if new_name:
+                        idx = st.session_state.subjects.index(sub_to_edit)
+                        st.session_state.subjects[idx] = new_name
+                        if not df_quiz.empty and "Subject" in df_quiz.columns:
+                            df_quiz.loc[df_quiz["Subject"] == sub_to_edit, "Subject"] = new_name
+                            try:
+                                conn.update(worksheet="Questions", data=df_quiz)
+                            except Exception as e:
+                                st.error(f"Failed to update questions in Google Sheets: {e}")
+                        save_subjects()
+                        st.success("Renamed successfully!")
+                        st.rerun()
+            with edit_col2:
+                st.write("Danger Zone:")
+                if st.button("🗑️ Delete Subject", type="primary"):
+                    st.session_state.subjects.remove(sub_to_edit)
+                    save_subjects()
+                    st.warning(f"'{sub_to_edit}' removed from list configuration.")
+                    st.rerun()
+        else:
+            st.info("No subjects currently registered.")
 
 # --- MODULE 1: AI QUESTION GENERATOR ---
 elif choice == "AI Question Generator":
