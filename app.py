@@ -9,6 +9,7 @@ from groq import Groq
 from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
+
 # --- SYSTEM INITIALIZATION & SESSION STATE ---
 
 if "live_questions" not in st.session_state:
@@ -22,24 +23,6 @@ if "show_answer" not in st.session_state:
 
 if "quiz_state" not in st.session_state:
     st.session_state.quiz_state = "setup"
-
-# --- DYNAMIC SUBJECT LOADING ---
-SUBJECTS_FILE = "subjects_list.json"
-DEFAULT_SUBJECTS = ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Basic Science", "Agricultural Science"]
-
-# Look for saved subjects first
-if os.path.exists(SUBJECTS_FILE):
-    with open(SUBJECTS_FILE, "r") as f:
-        try:
-            stored_subjects = json.load(f)
-        except json.JSONDecodeError:
-            stored_subjects = DEFAULT_SUBJECTS
-else:
-    stored_subjects = DEFAULT_SUBJECTS
-
-# Initialize session state with the saved dynamic list
-if "subjects" not in st.session_state:
-    st.session_state.subjects = stored_subjects
 
 # --- CUSTOM BALANCED CSS ---
 st.markdown("""
@@ -71,37 +54,44 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- LOAD QUESTIONS DATABASE ---
 try:
-    # Read questions from Google Sheets with 10-minute cache time to ensure live updates
     df_quiz = conn.read(worksheet="Questions", ttl="10m")
     df_quiz = df_quiz.dropna(how="all")
 except Exception as e:
     df_quiz = pd.DataFrame(columns=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"])
 
-# Ensure all expected columns are present
 for col in ["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"]:
     if col not in df_quiz.columns:
         df_quiz[col] = None
 
-# --- LOAD SUBJECTS ---
+# --- UNIFIED SUBJECT LOADING & AUTO-SYNC ---
 DEFAULT_SUBJECTS = ["Mathematics", "English Language", "Physics", "Chemistry", "Biology", "Basic Science", "Agricultural Science"]
+loaded_subjects = []
+
+# 1. Read from the 'Subjects' worksheet tab in Google Sheets
 try:
     df_subjects = conn.read(worksheet="Subjects", ttl="10m")
     df_subjects = df_subjects.dropna(how="all")
     if not df_subjects.empty and "Subjects" in df_subjects.columns:
-        stored_subjects = df_subjects["Subjects"].dropna().tolist()
-    else:
-        stored_subjects = DEFAULT_SUBJECTS
+        loaded_subjects.extend(df_subjects["Subjects"].dropna().tolist())
 except Exception as e:
-    stored_subjects = DEFAULT_SUBJECTS
+    pass
 
-if "subjects" not in st.session_state:
-    st.session_state.subjects = stored_subjects
+# 2. Harvest any subjects dynamically existing inside the 'Questions' database
+if not df_quiz.empty and "Subject" in df_quiz.columns:
+    loaded_subjects.extend(df_quiz["Subject"].dropna().unique().tolist())
+
+# 3. Fallback to defaults if both sheets are empty
+if not loaded_subjects:
+    loaded_subjects = DEFAULT_SUBJECTS
+
+# 4. Clean, deduplicate, sort alphabetically, and force into session state
+st.session_state.subjects = sorted(list(set([str(s).strip() for s in loaded_subjects if str(s).strip()])))
 
 def save_subjects():
     new_sub_df = pd.DataFrame({"Subjects": st.session_state.subjects})
     try:
         conn.update(worksheet="Subjects", data=new_sub_df)
-        st.cache_data.clear()  # 👈 CRUCIAL: Forces Streamlit to load fresh subjects on refresh!
+        st.cache_data.clear()  # 👈 Forces Streamlit to load fresh subjects on refresh!
     except Exception as e:
         st.error(f"Failed to save subjects to Google Sheets: {e}")
 
