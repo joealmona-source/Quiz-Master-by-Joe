@@ -195,14 +195,21 @@ if choice == "Subject Settings":
                         st.success("Renamed successfully!")
                         st.rerun()
             with edit_col2:
-                st.write("Danger Zone:")
-                if st.button("🗑️ Delete Subject", type="primary"):
-                    st.session_state.subjects.remove(sub_to_edit)
-                    save_subjects()
-                    st.warning(f"'{sub_to_edit}' removed from list configuration.")
-                    st.rerun()
-        else:
-            st.info("No subjects currently registered.")
+                st.write("🚨 **Danger Zone:**")
+                st.caption("Admin access required to delete.")
+                
+                # The password input box for the Admin PIN
+                admin_pin = st.text_input("Enter Admin PIN to unlock:", type="password", key="del_sub_pin")
+                
+                # Replace "7777" with whatever secret PIN you want to use!
+                if admin_pin == "7777": 
+                    if st.button("🗑️ Delete Subject", type="primary"):
+                        st.session_state.subjects.remove(sub_to_edit)
+                        save_subjects()
+                        st.warning(f"'{sub_to_edit}' removed from list configuration.")
+                        st.rerun()
+                elif admin_pin != "":
+                    st.error("Incorrect PIN.")
 
 # --- MODULE 1: AI QUESTION GENERATOR ---
 elif choice == "AI Question Generator":
