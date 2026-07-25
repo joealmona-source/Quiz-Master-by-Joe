@@ -52,19 +52,20 @@ st.markdown("""
 # --- GOOGLE SHEETS CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- AUTHENTICATION STATE ---
+# --- AUTHENTICATION STATE & PASSWORD FETCH ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
-# Fetch the live password from the Admin sheet (Cached for speed)
-try:
-    df_admin = conn.read(worksheet="Admin", ttl="10m")  # 👈 CHANGED THIS TO 10m
-    if not df_admin.empty and "Password" in df_admin.columns:
-        LIVE_PASSWORD = str(df_admin["Password"].iloc[0]).strip()
-    else:
-        LIVE_PASSWORD = "admin" 
-except Exception as e:
-    LIVE_PASSWORD = "admin" 
+# ONLY fetch the password from Google Sheets if the user is NOT logged in yet
+if not st.session_state.authenticated:
+    try:
+        df_admin = conn.read(worksheet="Admin", ttl="10m")
+        if not df_admin.empty and "Password" in df_admin.columns:
+            LIVE_PASSWORD = str(df_admin["Password"].iloc[0]).strip()
+        else:
+            LIVE_PASSWORD = "admin"
+    except Exception as e:
+        LIVE_PASSWORD = "admin"
 
 # --- LOGIN SCREEN ---
 if not st.session_state.authenticated:
