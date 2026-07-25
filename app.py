@@ -77,7 +77,7 @@ if not st.session_state.authenticated:
         
         entered_code = st.text_input("Access Code", type="password").strip()
         
-            if st.button("Unlock System", use_container_width=True):
+        if st.button("Unlock System", use_container_width=True):
             
             # 1. THE MASTER ADMIN BYPASS
             if entered_code == "1960":  # Change this to your secret master password
