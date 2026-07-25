@@ -13,11 +13,17 @@ st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial
 # --- HIDE STREAMLIT BRANDING & MENU ---
 hide_menu_style = """
     <style>
-    /* Hides the top right menu, share button, and GitHub icon */
-    header {visibility: hidden !important;}
+    /* Hide the top header completely */
+    [data-testid="stHeader"] {visibility: hidden !important;}
     
-    /* Hides the default Streamlit footer at the bottom */
+    /* Hide the specific toolbar (share, star, edit) */
+    [data-testid="stToolbar"] {visibility: hidden !important;}
+    
+    /* Hide the default Streamlit footer */
     footer {visibility: hidden !important;}
+    
+    /* Hide the default Main Menu (hamburger) if it exists */
+    #MainMenu {visibility: hidden !important;}
     </style>
 """
 st.markdown(hide_menu_style, unsafe_allow_html=True)
