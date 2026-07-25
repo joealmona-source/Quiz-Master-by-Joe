@@ -53,18 +53,18 @@ st.markdown("""
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- AUTHENTICATION STATE ---
-# We now store the school name in the session state too!
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
     st.session_state.logged_in_school = ""
 
-# Fetch the live access codes from the new AccessCodes sheet
-try:
-    df_codes = conn.read(worksheet="AccessCodes", ttl="0m")
-    # Force the Code column to be strings so numbers don't cause errors
-    df_codes['Code'] = df_codes['Code'].astype(str).str.strip()
-except Exception as e:
-    df_codes = pd.DataFrame() # Fallback if sheet is empty or fails
+# ONLY fetch access codes if the user is NOT logged in yet
+if not st.session_state.authenticated:
+    try:
+        # 👈 Changed ttl to 10m so it doesn't spam Google!
+        df_codes = conn.read(worksheet="AccessCodes", ttl="10m") 
+        df_codes['Code'] = df_codes['Code'].astype(str).str.strip()
+    except Exception as e:
+        df_codes = pd.DataFrame() 
 
 # --- LOGIN SCREEN ---
 if not st.session_state.authenticated:
