@@ -73,10 +73,12 @@ if not st.session_state.authenticated:
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown(f"<h2 style='text-align: center;'>🏫 {SCHOOL_NAME}</h2>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center;'>🔒 Authorized Personnel Only</h3>", unsafe_allow_html=True)
+        # Generic lock icon and title
+        st.markdown("<h2 style='text-align: center;'>🔒 System Locked</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>Authorized Personnel Only</p>", unsafe_allow_html=True)
         
         entered_pwd = st.text_input("Enter System Password", type="password")
+        
         if st.button("Unlock System", use_container_width=True):
             if entered_pwd == LIVE_PASSWORD:
                 st.session_state.authenticated = True
