@@ -52,42 +52,58 @@ st.markdown("""
 # --- GOOGLE SHEETS CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- AUTHENTICATION STATE & PASSWORD FETCH ---
+# --- AUTHENTICATION STATE ---
+# We now store the school name in the session state too!
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+    st.session_state.logged_in_school = ""
 
-# ONLY fetch the password from Google Sheets if the user is NOT logged in yet
-if not st.session_state.authenticated:
-    try:
-        df_admin = conn.read(worksheet="Admin", ttl="10m")
-        if not df_admin.empty and "Password" in df_admin.columns:
-            LIVE_PASSWORD = str(df_admin["Password"].iloc[0]).strip()
-        else:
-            LIVE_PASSWORD = "admin"
-    except Exception as e:
-        LIVE_PASSWORD = "admin"
+# Fetch the live access codes from the new AccessCodes sheet
+try:
+    df_codes = conn.read(worksheet="AccessCodes", ttl="0m")
+    # Force the Code column to be strings so numbers don't cause errors
+    df_codes['Code'] = df_codes['Code'].astype(str).str.strip()
+except Exception as e:
+    df_codes = pd.DataFrame() # Fallback if sheet is empty or fails
 
 # --- LOGIN SCREEN ---
 if not st.session_state.authenticated:
-    # Safe top padding for the login screen
     st.markdown("<style>.block-container { padding-top: 3rem !important; }</style>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Generic lock icon and title
         st.markdown("<h2 style='text-align: center;'>🔒 System Locked</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>Authorized Personnel Only</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center;'>Enter your School Access Code</p>", unsafe_allow_html=True)
         
-        entered_pwd = st.text_input("Enter System Password", type="password")
+        entered_code = st.text_input("Access Code", type="password").strip()
         
-        if st.button("Unlock System", use_container_width=True):
-            if entered_pwd == LIVE_PASSWORD:
+                if st.button("Unlock System", use_container_width=True):
+            
+            # 1. THE MASTER ADMIN BYPASS
+            if entered_code == "1960":  # Change this to your secret master password
                 st.session_state.authenticated = True
-                st.success("Access Granted!")
+                st.session_state.logged_in_school = "Admin"
+                st.success("Access Granted! Welcome back, Admin.")
                 time.sleep(1)
                 st.rerun()
+                
+            # 2. THE SCHOOL ACCESS CODE CHECK
+            elif not df_codes.empty and entered_code in df_codes['Code'].values:
+                # Find the row that matches the entered code
+                school_row = df_codes[df_codes['Code'] == entered_code].iloc[0]
+                school_name = school_row['School Name']
+                
+                # Update session state to log them in
+                st.session_state.authenticated = True
+                st.session_state.logged_in_school = school_name
+                
+                st.success(f"Access Granted! Welcome, {school_name}.")
+                time.sleep(1)
+                st.rerun()
+                
+            # 3. FAILED LOGIN
             else:
-                st.error("❌ Incorrect Password. Access Denied.")
+                st.error("❌ Invalid Access Code. Please contact the administrator.")
     
     # STOP EXECUTION HERE if not logged in
     st.stop() 
