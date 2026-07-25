@@ -10,23 +10,6 @@ from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
-# --- HIDE ONLY THE TOP-RIGHT TOOLBAR & MENU ---
-hide_menu_style = """
-    <style>
-    /* Hide ONLY the top-right toolbar (share, edit, github, three dots) */
-    [data-testid="stToolbar"] {
-        visibility: hidden !important;
-        display: none !important;
-    }
-    
-    /* Hide the default Streamlit footer */
-    footer {
-        visibility: hidden !important;
-    }
-    </style>
-"""
-st.markdown(hide_menu_style, unsafe_allow_html=True)
-
 # --- SYSTEM INITIALIZATION & SESSION STATE ---
 
 if "live_questions" not in st.session_state:
