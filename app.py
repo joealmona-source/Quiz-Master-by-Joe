@@ -201,8 +201,8 @@ if choice == "Subject Settings":
                 # The password input box for the Admin PIN
                 admin_pin = st.text_input("Enter Admin PIN to unlock:", type="password", key="del_sub_pin")
                 
-                # Replace "7777" with whatever secret PIN you want to use!
-                if admin_pin == "7777": 
+                # Replace "1960" with whatever secret PIN you want to use!
+                if admin_pin == "1960": 
                     if st.button("🗑️ Delete Subject", type="primary"):
                         st.session_state.subjects.remove(sub_to_edit)
                         save_subjects()
