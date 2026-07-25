@@ -336,6 +336,7 @@ elif choice == "Manual Input":
 # --- MODULE 3: VIEW QUIZ BANK ---
 elif choice == "View Quiz Bank":
     st.header("🗂️ Stored Questions Vault")
+    st.caption("You can edit any question text, options, or answers directly in the table below, then click save. You can also check the 'Delete' box to remove records.")
     
     if not df_quiz.empty:
         col1, col2 = st.columns(2)
@@ -349,24 +350,40 @@ elif choice == "View Quiz Bank":
         st.subheader("📚 Active Database Records")
         filtered.insert(0, "Delete", False)
         
+        # Allow editing across all question fields while keeping the Delete checkbox interactive
         edited_df = st.data_editor(
             filtered,
             hide_index=False,
-            use_container_width=True,
-            disabled=["Subject", "Topic", "Type", "Question", "Options", "Correct Answer"]
+            use_container_width=True
         )
+        
+        col_save, col_del = st.columns(2)
+        
+        with col_save:
+            if st.button("💾 Save Changes to Database", type="primary", use_container_width=True):
+                updated_subset = edited_df.drop(columns=["Delete"])
+                df_quiz.update(updated_subset)
+                try:
+                    conn.update(worksheet="Questions", data=df_quiz)
+                    st.success("Changes saved successfully to Google Sheets!")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to update database: {e}")
         
         indices_to_delete = edited_df[edited_df["Delete"] == True].index
         
-        if len(indices_to_delete) > 0:
-            if st.button(f"🗑️ Permanent Delete Selected Questions ({len(indices_to_delete)})", type="primary"):
-                df_quiz = df_quiz.drop(indices_to_delete).reset_index(drop=True)
-                try:
-                    conn.update(worksheet="Questions", data=df_quiz)
-                    st.success("Selected records removed from database successfully!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to delete records in Google Sheets: {e}")
+        with col_del:
+            if len(indices_to_delete) > 0:
+                if st.button(f"🗑️ Delete Selected Records ({len(indices_to_delete)})", use_container_width=True):
+                    df_quiz = df_quiz.drop(indices_to_delete).reset_index(drop=True)
+                    try:
+                        conn.update(worksheet="Questions", data=df_quiz)
+                        st.success("Selected records removed from database successfully!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to delete records in Google Sheets: {e}")
     else:
         st.info("The saved question vault is currently empty.")
 
