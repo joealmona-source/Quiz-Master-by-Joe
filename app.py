@@ -10,20 +10,19 @@ from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
-# --- HIDE STREAMLIT BRANDING & MENU ---
+# --- HIDE ONLY THE TOP-RIGHT TOOLBAR & MENU ---
 hide_menu_style = """
     <style>
-    /* Hide the top header completely */
-    [data-testid="stHeader"] {visibility: hidden !important;}
-    
-    /* Hide the specific toolbar (share, star, edit) */
-    [data-testid="stToolbar"] {visibility: hidden !important;}
+    /* Hide ONLY the top-right toolbar (share, edit, github, three dots) */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+        display: none !important;
+    }
     
     /* Hide the default Streamlit footer */
-    footer {visibility: hidden !important;}
-    
-    /* Hide the default Main Menu (hamburger) if it exists */
-    #MainMenu {visibility: hidden !important;}
+    footer {
+        visibility: hidden !important;
+    }
     </style>
 """
 st.markdown(hide_menu_style, unsafe_allow_html=True)
