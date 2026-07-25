@@ -56,15 +56,15 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
-# Fetch the live password from the Admin sheet (ttl=0 ensures it always gets the latest password)
+# Fetch the live password from the Admin sheet (Cached for speed)
 try:
-    df_admin = conn.read(worksheet="Admin", ttl="0m")
+    df_admin = conn.read(worksheet="Admin", ttl="10m")  # 👈 CHANGED THIS TO 10m
     if not df_admin.empty and "Password" in df_admin.columns:
         LIVE_PASSWORD = str(df_admin["Password"].iloc[0]).strip()
     else:
-        LIVE_PASSWORD = "admin" # Fallback if sheet is empty
+        LIVE_PASSWORD = "admin" 
 except Exception as e:
-    LIVE_PASSWORD = "admin" # Fallback if connection fails
+    LIVE_PASSWORD = "admin" 
 
 # --- LOGIN SCREEN ---
 if not st.session_state.authenticated:
