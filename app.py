@@ -142,7 +142,7 @@ if st.sidebar.button("🔄 Sync Google Sheets", use_container_width=True):
     st.cache_data.clear()
     st.sidebar.success("App synced with Google Sheets!")
 
-menu = ["AI Question Generator", "Manual Input", "View Quiz Bank", "Subject Settings", "Live Competition Mode", "Security Settings"]
+menu = ["AI Question Generator", "Manual Input", "View Quiz Bank", "Subject Settings", "Live Competition Mode"]
 choice = st.sidebar.selectbox("Go to Module", menu)
 
 # --- MODULE: SUBJECT SETTINGS ---
@@ -655,34 +655,3 @@ elif choice == "Live Competition Mode":
                     
     else:
         st.info("The database is currently empty.")
-
-# --- MODULE 5: SECURITY SETTINGS ---
-elif choice == "Security Settings":
-    st.header("🔐 Security & Access Control")
-    st.caption("Update the master password for the Quiz Champion Pro system.")
-    
-    st.info("Changing the password will take effect immediately. Anyone trying to log in will need the new password.")
-    
-    with st.form("password_change_form", clear_on_submit=True):
-        new_password = st.text_input("Enter New Password", type="password")
-        confirm_password = st.text_input("Confirm New Password", type="password")
-        
-        submit_btn = st.form_submit_button("Update Master Password", type="primary")
-        
-        if submit_btn:
-            if len(new_password) < 4:
-                st.error("Password must be at least 4 characters long.")
-            elif new_password != confirm_password:
-                st.error("Passwords do not match. Please try again.")
-            else:
-                # Create a dataframe with the new password
-                new_admin_df = pd.DataFrame({"Password": [new_password]})
-                try:
-                    # Overwrite the Admin sheet with the new password
-                    conn.update(worksheet="Admin", data=new_admin_df)
-                    st.success("✅ Master password updated successfully!")
-                    
-                    # Force Streamlit to clear cache so it recognizes the new password instantly
-                    st.cache_data.clear()
-                except Exception as e:
-                    st.error(f"Failed to update password in database: {e}")
