@@ -688,7 +688,6 @@ elif choice == "Exam Mode Setup":
             col1, col2 = st.columns(2)
             with col1:
                 exam_title = st.text_input("Exam Title", placeholder="e.g., Senior Sec. Physics Mock Exam")
-                # Auto-fills with the currently logged-in school
                 school_name = st.text_input("School Name", value=st.session_state.get("logged_in_school", ""))
                 examiner_name = st.text_input("Examiner Name")
             with col2:
@@ -708,54 +707,71 @@ elif choice == "Exam Mode Setup":
                 end_time = st.time_input("End Time")
 
             st.subheader("Question Selection")
-            # Pulls dynamically from your existing loaded subjects
             subjects = st.multiselect("Select Subjects", st.session_state.subjects)
-            q_types = st.multiselect(
-                "Question Types", 
-                ["Multiple Choice (Objectives)", "Short Answer / Theory"], 
-                default=["Multiple Choice (Objectives)", "Short Answer / Theory"]
-            )
-            num_questions = st.number_input("Max Questions to Pull per Subject & Type", min_value=1, value=10)
+            
+            # --- NEW: Independent Question Quantities ---
+            col_q1, col_q2 = st.columns(2)
+            with col_q1:
+                num_mcq = st.number_input("Multiple Choice Questions (per subject)", min_value=0, value=20)
+            with col_q2:
+                num_theory = st.number_input("Short Answer / Theory Questions (per subject)", min_value=0, value=5)
 
             submit_exam = st.form_submit_button("Generate Exam Link")
 
             if submit_exam:
-                if not exam_title or not exam_pin or not subjects or not q_types:
-                    st.error("Please fill in the Exam Title, Examiner PIN, Subjects, and Question Types.")
+                if not exam_title or not exam_pin or not subjects:
+                    st.error("Please fill in the Exam Title, Examiner PIN, and select at least one Subject.")
+                elif num_mcq == 0 and num_theory == 0:
+                    st.error("Please allocate at least 1 question to generate the exam.")
                 else:
                     start_datetime = f"{start_date} {start_time}"
                     end_datetime = f"{end_date} {end_time}"
                     exam_id = f"EXAM-{str(uuid.uuid4())[:6].upper()}"
                     
-                    # 1. Filter the live master database for selected subjects and types
-                    selected_qs = df_quiz[df_quiz["Subject"].isin(subjects) & df_quiz["Type"].isin(q_types)]
+                    # 1. Filter the live master database for selected subjects
+                    selected_qs = df_quiz[df_quiz["Subject"].isin(subjects)]
                     
                     if selected_qs.empty:
-                        st.error("No questions found in the database for the selected subjects and types.")
+                        st.error("No questions found in the database for the selected subjects.")
                     else:
                         with st.spinner("Compiling exam and saving to database..."):
                             final_exam_qs = []
-                            # 2. Logic to ensure Multiple Choice is pulled FIRST, then Theory SECOND
-                            for subj in subjects:
-                                for q_type in ["Multiple Choice (Objectives)", "Short Answer / Theory"]:
-                                    if q_type in q_types:
-                                        pool = selected_qs[(selected_qs["Subject"] == subj) & (selected_qs["Type"] == q_type)]
-                                        if not pool.empty:
-                                            # Randomly sample the requested number of questions
-                                            sampled = pool.sample(n=min(num_questions, len(pool)))
-                                            
-                                            for idx, row in sampled.iterrows():
-                                                final_exam_qs.append({
-                                                    "Exam_ID": exam_id,
-                                                    "Question_Number": 0, # Will number sequentially below
-                                                    "Question_Type": row["Type"],
-                                                    "Subject": row["Subject"],
-                                                    "Question_Text": row["Question"],
-                                                    "Options": row["Options"],
-                                                    "Correct_Answer": row["Correct Answer"]
-                                                })
                             
-                            # 3. Number the questions 1, 2, 3...
+                            # 2. Independent Extraction Logic
+                            for subj in subjects:
+                                # Pull Multiple Choice FIRST
+                                if num_mcq > 0:
+                                    pool_mcq = selected_qs[(selected_qs["Subject"] == subj) & (selected_qs["Type"] == "Multiple Choice (Objectives)")]
+                                    if not pool_mcq.empty:
+                                        sampled_mcq = pool_mcq.sample(n=min(num_mcq, len(pool_mcq)))
+                                        for idx, row in sampled_mcq.iterrows():
+                                            final_exam_qs.append({
+                                                "Exam_ID": exam_id,
+                                                "Question_Number": 0, 
+                                                "Question_Type": row["Type"],
+                                                "Subject": row["Subject"],
+                                                "Question_Text": row["Question"],
+                                                "Options": row["Options"],
+                                                "Correct_Answer": row["Correct Answer"]
+                                            })
+                                            
+                                # Pull Short Answer Theory SECOND
+                                if num_theory > 0:
+                                    pool_theory = selected_qs[(selected_qs["Subject"] == subj) & (selected_qs["Type"] == "Short Answer / Theory")]
+                                    if not pool_theory.empty:
+                                        sampled_theory = pool_theory.sample(n=min(num_theory, len(pool_theory)))
+                                        for idx, row in sampled_theory.iterrows():
+                                            final_exam_qs.append({
+                                                "Exam_ID": exam_id,
+                                                "Question_Number": 0, 
+                                                "Question_Type": row["Type"],
+                                                "Subject": row["Subject"],
+                                                "Question_Text": row["Question"],
+                                                "Options": row["Options"],
+                                                "Correct_Answer": row["Correct Answer"]
+                                            })
+                            
+                            # 3. Number the questions sequentially
                             for i, q in enumerate(final_exam_qs):
                                 q["Question_Number"] = i + 1
                                 
@@ -788,7 +804,6 @@ elif choice == "Exam Mode Setup":
                                 conn.update(worksheet="Exam_Questions", data=df_exam_questions)
                                 
                                 st.success("✅ Exam Successfully Created & Saved to Database!")
-                                # NOTE: We will build the routing logic in the next step to make this link work!
                                 exam_url = f"https://YOUR-APP-URL.streamlit.app/?exam={exam_id}"
                                 st.info(f"**Share this link with students:**\n{exam_url}")
                             except Exception as e:
