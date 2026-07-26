@@ -449,8 +449,10 @@ if "exam" in st.query_params:
                     st.success(f"✅ Successfully updated grades for {selected_student}!")
                     time.sleep(1)
                     st.rerun()
-st.stop()
 
+    # This stop safely locks the rest of the app when a student or examiner view is active
+    st.stop()
+    
 # --- AUTHENTICATION STATE ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
