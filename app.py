@@ -336,7 +336,7 @@ if "exam" in st.query_params:
             except Exception as e:
                 st.error(f"⚠️ Error saving results: {e}")
     
-    st.stop() 
+      st.stop() 
   
     # --- EXAMINER DASHBOARD VIEW (STAGE 5) ---
     elif st.session_state.exam_state == "examiner_dashboard":
