@@ -335,7 +335,9 @@ if "exam" in st.query_params:
                 st.balloons()
             except Exception as e:
                 st.error(f"⚠️ Error saving results: {e}")
-        
+    
+    st.stop() 
+  
     # --- EXAMINER DASHBOARD VIEW (STAGE 5) ---
     elif st.session_state.exam_state == "examiner_dashboard":
         st.markdown("<h2 style='text-align: center;'>👨‍🏫 Examiner Dashboard</h2>", unsafe_allow_html=True)
