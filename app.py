@@ -141,33 +141,45 @@ if "exam" in st.query_params:
     # --- IN PROGRESS VIEW (STAGE 4) ---
     elif st.session_state.exam_state == "in_progress":
         
-        # AGGRESSIVE CSS: Makes radio buttons, text, and spacing significantly larger
+        # AGGRESSIVE CSS: Makes radio buttons, text, and options significantly larger and easier to read
         st.markdown("""
         <style>
-        /* Increase the text size of the options */
         .stRadio label p { font-size: 22px !important; margin-left: 10px; line-height: 1.5; color: #0f172a; }
-        /* Increase the size of the clickable radio circle */
         .stRadio div[role="radio"] { transform: scale(1.6); margin-top: 2px; }
-        /* Add more vertical space between each option */
         .stRadio > div { gap: 1.5rem !important; }
         </style>
         """, unsafe_allow_html=True)
         
+        # 1. Initialize Exam State Questions
         if "exam_qs" not in st.session_state:
             df_eq = conn.read(worksheet="Exam_Questions", ttl="0m")
             q_list = df_eq[df_eq["Exam_ID"] == exam_info["Exam_ID"]].to_dict('records')
             st.session_state.exam_qs = q_list
-            st.session_state.student_answers = {} 
+            if "student_answers" not in st.session_state:
+                st.session_state.student_answers = {} 
             st.session_state.current_q = 0
             
         qs = st.session_state.exam_qs
         idx = st.session_state.current_q
+        
+        if not qs:
+            st.error("⚠️ No questions were found loaded for this exam ID. Please check your database.")
+            if st.button("⬅️ Back to Landing"):
+                st.session_state.exam_state = "landing"
+                st.rerun()
+            st.stop()
+            
         current_q_data = qs[idx]
         
+        # 2. Timer Calculation
         elapsed_seconds = time.time() - st.session_state.exam_start_time
-        time_left = max(0, int(exam_info["Timer_Seconds"]) - elapsed_seconds)
+        try:
+            allowed_secs = int(exam_info["Timer_Seconds"])
+        except Exception:
+            allowed_secs = 1800 # Default fallback 30 mins
+        time_left = max(0, allowed_secs - elapsed_seconds)
         
-        # Mobile-Friendly Top Layout
+        # 3. Top Header Bar (Timer & Submit)
         top1, top2 = st.columns(2)
         with top1:
             timer_html = f"""
@@ -198,15 +210,67 @@ if "exam" in st.query_params:
                 st.session_state.exam_state = "submitted"
                 st.rerun()
 
-        # FIX: Calculator is now a full-width expander to ensure it renders on mobile
-        calc_allowed = str(exam_info.get("Allow_Calculator", "")).strip().upper()
+        # 4. Safe Calculator Expander
+        calc_allowed = str(exam_info.get("Allow_Calculator", "False")).strip().upper()
         if calc_allowed in ['TRUE', '1', 'YES', 'ON']:
             with st.expander("🧮 Open Scientific Calculator", expanded=False):
                 st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
 
         st.markdown("---")
         
-        # FIX: Housed inside a drawer (expander) to save screen space
+        # 5. Question Box Banner
+        st.markdown(f"""
+        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 5px solid #0284c7; margin-bottom: 20px;">
+            <span style="color: #64748b; font-weight: 600; font-size: 1.1rem;">Question {idx + 1} of {len(qs)}</span>
+            <h3 style="color: #0f172a; margin-top: 10px;">{current_q_data.get('Question_Text', '')}</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 6. Answer Input (Objectives vs Theory)
+        saved_ans = st.session_state.student_answers.get(idx, None)
+        q_type = str(current_q_data.get('Question_Type', ''))
+        
+        if "Multiple Choice" in q_type or "Objective" in q_type:
+            raw_options = str(current_q_data.get('Options', ''))
+            options = [opt.strip() for opt in raw_options.split(",") if opt.strip()]
+            
+            if options:
+                selection = st.radio(
+                    "Select your answer:", 
+                    options, 
+                    index=options.index(saved_ans) if saved_ans in options else None, 
+                    key=f"q_radio_{idx}"
+                )
+                if selection:
+                    st.session_state.student_answers[idx] = selection
+            else:
+                st.warning("⚠️ No options found for this question.")
+        else:
+            theory_ans = st.text_area(
+                "Type your answer here:", 
+                value=saved_ans if saved_ans else "", 
+                key=f"q_text_{idx}", 
+                height=150
+            )
+            if theory_ans:
+                st.session_state.student_answers[idx] = theory_ans
+                
+        st.write("")
+        
+        # 7. Previous / Next Buttons
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+        with c2:
+            if st.button("⬅️ Previous", use_container_width=True, disabled=(idx == 0)):
+                st.session_state.current_q -= 1
+                st.rerun()
+        with c3:
+            if st.button("Next ➡️", use_container_width=True, disabled=(idx == len(qs) - 1)):
+                st.session_state.current_q += 1
+                st.rerun()
+                
+        st.markdown("---")
+        
+        # 8. Jump to Question Grid Drawer
         with st.expander("🔢 View / Jump to Questions", expanded=False):
             cols_per_row = 10 
             for i in range(0, len(qs), cols_per_row):
@@ -219,7 +283,7 @@ if "exam" in st.query_params:
                         
                         if grid_cols[j].button(btn_label, key=f"nav_grid_{q_index}", use_container_width=True):
                             st.session_state.current_q = q_index
-                            st.rerun()
+                            st.rerun()    
 
     # --- SUBMISSION AND AUTOGRADING VIEW (STAGE 5) ---
     elif st.session_state.exam_state == "submitted":
