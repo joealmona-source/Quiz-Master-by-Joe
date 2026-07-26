@@ -55,13 +55,11 @@ st.markdown("""
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- EXAM MODE URL INTERCEPTOR (STAGE 3) ---
-# Check if a student or examiner clicked an exam link
 if "exam" in st.query_params:
     exam_id_param = st.query_params["exam"]
     
-    # 1. Fetch Exam Details
     try:
-        df_active = conn.read(worksheet="Active_Exams", ttl="0m") # Real-time read
+        df_active = conn.read(worksheet="Active_Exams", ttl="0m")
         exam_data = df_active[df_active["Exam_ID"] == exam_id_param]
     except Exception as e:
         st.error("Could not connect to the database.")
@@ -73,60 +71,47 @@ if "exam" in st.query_params:
         
     exam_info = exam_data.iloc[0]
     
-    # 2. Strict Time Validation Logic
-    current_time = datetime.now()
-    try:
-        # Parses the date and time format saved to Google Sheets
-        start_dt = datetime.strptime(str(exam_info["Start_DateTime"]), "%Y-%m-%d %H:%M:%S")
-        end_dt = datetime.strptime(str(exam_info["End_DateTime"]), "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        # Fallback just in case the format saved slightly differently
-        start_dt = pd.to_datetime(exam_info["Start_DateTime"])
-        end_dt = pd.to_datetime(exam_info["End_DateTime"])
-
-    # 3. Render the Header
-    st.markdown(f"<h1 style='text-align: center; color: #38bdf8;'>{exam_info['Exam_Title']}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='text-align: center;'>{exam_info['School_Name']}</h3>", unsafe_allow_html=True)
+    # Format the header exactly as requested: Big/Bold School Name, Smaller Exam Title
+    st.markdown(f"<h1 style='text-align: center; font-size: 3.5rem; font-weight: 900; color: #0f172a; margin-bottom: 0;'>{exam_info['School_Name']}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='text-align: center; font-size: 1.8rem; font-weight: 500; color: #0284c7; margin-top: 0;'>{exam_info['Exam_Title']}</h2>", unsafe_allow_html=True)
     
-    # Enforce Time Lock
-    if current_time < start_dt:
-        st.warning(f"⏳ **This exam is scheduled to start on {start_dt.strftime('%B %d, %Y at %I:%M %p')}.** Please check back later.")
-        st.stop()
-    elif current_time > end_dt:
-        st.error("🛑 **This exam has expired.** The submission window is closed.")
-        st.stop()
-        
-    # 4. State Management for the Exam Interface
     if "exam_state" not in st.session_state:
         st.session_state.exam_state = "landing"
         
     # --- LANDING PAGE VIEW ---
     if st.session_state.exam_state == "landing":
         st.write("---")
-        st.markdown(f"**Examiner:** {exam_info['Examiner_Name']}")
-        st.markdown(f"**Instructions:**\n{exam_info['Instructions']}")
+        # Instructions styled in italics
+        st.markdown(f"<div style='text-align: center; font-style: italic; font-size: 1.1rem; color: #475569;'><b>Instructions:</b><br>{exam_info['Instructions']}</div>", unsafe_allow_html=True)
         st.write("---")
         
         col1, col2 = st.columns([2, 1])
         with col1:
-            st.subheader("📝 Student Details")
+            st.subheader("📝 Student Registration")
             student_name = st.text_input("Full Name (Surname First)")
             student_class = st.text_input("Class")
-            student_contact = st.text_input("Phone Number / Email")
             
             if st.button("🚀 Start Exam", type="primary", use_container_width=True):
-                if student_name and student_class:
-                    st.session_state.student_info = {
-                        "name": student_name, 
-                        "class": student_class, 
-                        "contact": student_contact
-                    }
-                    st.session_state.exam_state = "in_progress"
-                    # Capture exact start time for the timer
-                    st.session_state.exam_start_time = time.time()
-                    st.rerun()
+                # TIME CHECK HAPPENS HERE NOW!
+                current_time = datetime.now()
+                try:
+                    start_dt = datetime.strptime(str(exam_info["Start_DateTime"]), "%Y-%m-%d %H:%M:%S")
+                    end_dt = datetime.strptime(str(exam_info["End_DateTime"]), "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    start_dt = pd.to_datetime(exam_info["Start_DateTime"])
+                    end_dt = pd.to_datetime(exam_info["End_DateTime"])
+
+                if current_time < start_dt:
+                    st.error(f"⏳ **Too Early:** This exam opens on {start_dt.strftime('%B %d, %Y at %I:%M %p')}.")
+                elif current_time > end_dt:
+                    st.error("🛑 **Exam Closed:** The submission window for this exam has expired.")
+                elif not student_name or not student_class:
+                    st.error("⚠️ Please enter your name and class to begin.")
                 else:
-                    st.error("Please enter your name and class to begin.")
+                    st.session_state.student_info = {"name": student_name, "class": student_class}
+                    st.session_state.exam_state = "in_progress"
+                    st.session_state.exam_start_time = time.time() # Start the clock!
+                    st.rerun()
                     
         with col2:
             st.subheader("👨‍🏫 Examiner Portal")
@@ -138,9 +123,150 @@ if "exam" in st.query_params:
                 else:
                     st.error("Incorrect PIN. Access Denied.")
                     
-    # --- IN PROGRESS VIEW (Placeholder for Stage 4) ---
+    # --- IN PROGRESS VIEW (STAGE 4) ---
     elif st.session_state.exam_state == "in_progress":
-         st.info("Loading Exam Questions... (Stage 4 UI goes here)")
+        
+        # 1. Fetch & Store Exam Questions (Only on first load)
+        if "exam_qs" not in st.session_state:
+            df_eq = conn.read(worksheet="Exam_Questions", ttl="0m")
+            q_list = df_eq[df_eq["Exam_ID"] == exam_info["Exam_ID"]].to_dict('records')
+            st.session_state.exam_qs = q_list
+            st.session_state.student_answers = {} # Tracks {question_index: selected_answer}
+            st.session_state.current_q = 0
+            
+        qs = st.session_state.exam_qs
+        idx = st.session_state.current_q
+        current_q_data = qs[idx]
+        
+        # 2. Time Management & Auto-Submit Logic
+        elapsed_seconds = time.time() - st.session_state.exam_start_time
+        total_allowed_seconds = int(exam_info["Timer_Seconds"])
+        time_left = max(0, total_allowed_seconds - elapsed_seconds)
+        
+        # Hidden button that JS will click when time runs out
+        st.markdown("<div style='display: none;'>", unsafe_allow_html=True)
+        if st.button("AutoSubmitHiddenBtn", key="hidden_auto_submit"):
+            st.session_state.exam_state = "submitted"
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # 3. Top Navigation Bar (Timer, Calc, Submit)
+        top1, top2, top3, top4 = st.columns([2, 1, 1, 1])
+        
+        with top1:
+            # Visual Live Timer JS
+            timer_html = f"""
+            <div id="exam_timer" style="font-size: 1.8rem; font-weight: bold; color: #16a34a; font-family: monospace;"></div>
+            <script>
+            var timeLeft = {time_left};
+            var elem = document.getElementById('exam_timer');
+            var timerId = setInterval(function() {{
+                if (timeLeft <= 0) {{ 
+                    clearInterval(timerId); elem.innerHTML = "00:00"; elem.style.color = "red";
+                    // Finds and clicks the hidden Python button to force submission!
+                    var btns = window.parent.document.querySelectorAll('button');
+                    for(var i=0; i<btns.length; i++) {{
+                        if(btns[i].innerText.includes('AutoSubmitHiddenBtn')) {{ btns[i].click(); }}
+                    }}
+                }} else {{
+                    var m = Math.floor(timeLeft / 60); var s = Math.floor(timeLeft % 60);
+                    elem.innerHTML = "⏱️ " + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                    if(timeLeft < 120) {{ elem.style.color = "#dc2626"; }} // Turns red at 2 mins
+                    timeLeft--;
+                }}
+            }}, 1000);
+            </script>
+            """
+            st.components.v1.html(timer_html, height=45)
+            
+        with top3:
+            # Check if calc is allowed (handling bool or string from DB)
+            calc_allowed = exam_info.get("Allow_Calculator", False)
+            if str(calc_allowed).lower() == 'true':
+                with st.popover("🧮 Calculator", use_container_width=True):
+                    st.write("Basic Scientific Calculator")
+                    calc_html = """
+                    <iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>
+                    """
+                    st.components.v1.html(calc_html, height=360)
+                    
+        with top4:
+            if st.button("Submit Exam 🏁", type="primary", use_container_width=True):
+                st.session_state.exam_state = "submitted"
+                st.rerun()
+
+        st.markdown("---")
+        
+        # 4. Question Interface
+        st.markdown(f"""
+        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 5px solid #0284c7; margin-bottom: 20px;">
+            <span style="color: #64748b; font-weight: 600;">Question {idx + 1} of {len(qs)}</span>
+            <h3 style="color: #0f172a; margin-top: 10px;">{current_q_data['Question_Text']}</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 5. Answer Selection Logic
+        saved_ans = st.session_state.student_answers.get(idx, None)
+        
+        if current_q_data['Question_Type'] == "Multiple Choice (Objectives)":
+            options = [opt.strip() for opt in str(current_q_data['Options']).split(",")]
+            # Cleanly render options as radio buttons without default selection
+            selection = st.radio(
+                "Select your answer:", 
+                options, 
+                index=options.index(saved_ans) if saved_ans in options else None,
+                key=f"q_{idx}"
+            )
+            if selection:
+                st.session_state.student_answers[idx] = selection
+        else:
+            # For Short Answer Theory questions
+            theory_ans = st.text_input("Type your answer here:", value=saved_ans if saved_ans else "", key=f"q_{idx}")
+            if theory_ans:
+                st.session_state.student_answers[idx] = theory_ans
+                
+        st.write("")
+        st.write("")
+        
+        # 6. Prev/Next Buttons (Bottom Middle)
+        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
+        with c2:
+            if st.button("⬅️ Previous", use_container_width=True, disabled=(idx == 0)):
+                st.session_state.current_q -= 1
+                st.rerun()
+        with c3:
+            if st.button("Next ➡️", use_container_width=True, disabled=(idx == len(qs) - 1)):
+                st.session_state.current_q += 1
+                st.rerun()
+                
+        st.markdown("---")
+        
+        # 7. Dynamic Question Grid (The ✅ and ⚪ logic)
+        st.markdown("**Jump to Question:**")
+        
+        # Wrap the grid in a scrollable container in case there are 100+ questions
+        grid_container = st.container(height=180)
+        with grid_container:
+            cols_per_row = 10 
+            for i in range(0, len(qs), cols_per_row):
+                grid_cols = st.columns(cols_per_row)
+                for j in range(cols_per_row):
+                    if i + j < len(qs):
+                        q_index = i + j
+                        # Determine if the student has provided an answer for this index
+                        is_answered = pd.notna(st.session_state.student_answers.get(q_index)) and str(st.session_state.student_answers.get(q_index)).strip() != ""
+                        
+                        # Apply Emoji UI: Green check if answered, hollow circle if not
+                        btn_label = f"✅ {q_index + 1}" if is_answered else f"⚪ {q_index + 1}"
+                        
+                        if grid_cols[j].button(btn_label, key=f"nav_grid_{q_index}", use_container_width=True):
+                            st.session_state.current_q = q_index
+                            st.rerun()
+
+    # --- SUBMISSION SUCCESS VIEW (Placeholder for Stage 5) ---
+    elif st.session_state.exam_state == "submitted":
+         st.success(f"🎉 Exam Submitted Successfully!")
+         st.info("Your answers have been recorded. You may close this window.")
          
     # --- EXAMINER DASHBOARD VIEW (Placeholder for Stage 5) ---
     elif st.session_state.exam_state == "examiner_dashboard":
@@ -148,8 +274,8 @@ if "exam" in st.query_params:
          if st.button("⬅️ Back to Landing Page"):
              st.session_state.exam_state = "landing"
              st.rerun()
-             
-    # 5. CRITICAL: Stop the rest of the app from loading!
+
+    # Stop the main app from loading!
     st.stop()
 
 # --- AUTHENTICATION STATE ---
@@ -813,6 +939,7 @@ elif choice == "Exam Mode Setup":
                 num_mcq = st.number_input("Multiple Choice Questions (per subject)", min_value=0, value=20)
             with col_q2:
                 num_theory = st.number_input("Short Answer / Theory Questions (per subject)", min_value=0, value=5)
+                allow_calc = st.checkbox("Allow Basic Scientific Calculator for this Exam")
 
             submit_exam = st.form_submit_button("Generate Exam Link")
 
@@ -893,7 +1020,8 @@ elif choice == "Exam Mode Setup":
                                 "End_DateTime": [end_datetime],
                                 "Timer_Seconds": [timer_seconds],
                                 "Points_Per_Question": [points_per_q],
-                                "Status": ["Active"]
+                                "Status": ["Active"],
+                                "Allow_Calculator": [allow_calc] # <--- NEW LINE ADDED HERE
                             }
                             
                             try:
