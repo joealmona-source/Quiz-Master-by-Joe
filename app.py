@@ -4,6 +4,8 @@ import os
 import json
 import random
 import time
+import uuid
+from datetime import datetime
 import streamlit.components.v1 as components
 from groq import Groq
 from streamlit_gsheets import GSheetsConnection
@@ -158,7 +160,7 @@ if st.sidebar.button("🔄 Sync Google Sheets", use_container_width=True):
     st.cache_data.clear()
     st.sidebar.success("App synced with Google Sheets!")
 
-menu = ["AI Question Generator", "Manual Input", "View Quiz Bank", "Subject Settings", "Live Competition Mode"]
+menu = ["AI Question Generator", "Manual Input", "View Quiz Bank", "Subject Settings", "Live Competition Mode", "Exam Mode Setup"]
 choice = st.sidebar.selectbox("Go to Module", menu)
 
 # --- MODULE: SUBJECT SETTINGS ---
@@ -671,3 +673,177 @@ elif choice == "Live Competition Mode":
                     
     else:
         st.info("The database is currently empty.")
+# --- MODULE 5: EXAM MODE SETUP ---
+elif choice == "Exam Mode Setup":
+    st.header("⚙️ Exam Mode Setup")
+    
+    setup_tab, manage_tab = st.tabs(["📝 Create New Exam", "🗑️ Manage/Delete Exams"])
+
+    # ==========================================
+    # TAB 1: EXAM CREATION
+    # ==========================================
+    with setup_tab:
+        with st.form("exam_setup_form", clear_on_submit=False):
+            st.subheader("Exam Details")
+            col1, col2 = st.columns(2)
+            with col1:
+                exam_title = st.text_input("Exam Title", placeholder="e.g., Senior Sec. Physics Mock Exam")
+                # Auto-fills with the currently logged-in school
+                school_name = st.text_input("School Name", value=st.session_state.get("logged_in_school", ""))
+                examiner_name = st.text_input("Examiner Name")
+            with col2:
+                exam_pin = st.text_input("Examiner PIN (To view scores later)", type="password")
+                timer_seconds = st.number_input("Timer (in seconds)", min_value=60, value=3600, step=60)
+                points_per_q = st.number_input("Points Per Question", min_value=1, value=1)
+
+            instructions = st.text_area("Instructions for Students", placeholder="e.g., Attempt all questions. No calculators allowed.")
+
+            st.subheader("Availability Schedule")
+            col3, col4 = st.columns(2)
+            with col3:
+                start_date = st.date_input("Start Date")
+                start_time = st.time_input("Start Time")
+            with col4:
+                end_date = st.date_input("End Date")
+                end_time = st.time_input("End Time")
+
+            st.subheader("Question Selection")
+            # Pulls dynamically from your existing loaded subjects
+            subjects = st.multiselect("Select Subjects", st.session_state.subjects)
+            q_types = st.multiselect(
+                "Question Types", 
+                ["Multiple Choice (Objectives)", "Short Answer / Theory"], 
+                default=["Multiple Choice (Objectives)", "Short Answer / Theory"]
+            )
+            num_questions = st.number_input("Max Questions to Pull per Subject & Type", min_value=1, value=10)
+
+            submit_exam = st.form_submit_button("Generate Exam Link")
+
+            if submit_exam:
+                if not exam_title or not exam_pin or not subjects or not q_types:
+                    st.error("Please fill in the Exam Title, Examiner PIN, Subjects, and Question Types.")
+                else:
+                    start_datetime = f"{start_date} {start_time}"
+                    end_datetime = f"{end_date} {end_time}"
+                    exam_id = f"EXAM-{str(uuid.uuid4())[:6].upper()}"
+                    
+                    # 1. Filter the live master database for selected subjects and types
+                    selected_qs = df_quiz[df_quiz["Subject"].isin(subjects) & df_quiz["Type"].isin(q_types)]
+                    
+                    if selected_qs.empty:
+                        st.error("No questions found in the database for the selected subjects and types.")
+                    else:
+                        with st.spinner("Compiling exam and saving to database..."):
+                            final_exam_qs = []
+                            # 2. Logic to ensure Multiple Choice is pulled FIRST, then Theory SECOND
+                            for subj in subjects:
+                                for q_type in ["Multiple Choice (Objectives)", "Short Answer / Theory"]:
+                                    if q_type in q_types:
+                                        pool = selected_qs[(selected_qs["Subject"] == subj) & (selected_qs["Type"] == q_type)]
+                                        if not pool.empty:
+                                            # Randomly sample the requested number of questions
+                                            sampled = pool.sample(n=min(num_questions, len(pool)))
+                                            
+                                            for idx, row in sampled.iterrows():
+                                                final_exam_qs.append({
+                                                    "Exam_ID": exam_id,
+                                                    "Question_Number": 0, # Will number sequentially below
+                                                    "Question_Type": row["Type"],
+                                                    "Subject": row["Subject"],
+                                                    "Question_Text": row["Question"],
+                                                    "Options": row["Options"],
+                                                    "Correct_Answer": row["Correct Answer"]
+                                                })
+                            
+                            # 3. Number the questions 1, 2, 3...
+                            for i, q in enumerate(final_exam_qs):
+                                q["Question_Number"] = i + 1
+                                
+                            # 4. Prepare the master exam record
+                            exam_record = {
+                                "Exam_ID": [exam_id],
+                                "Exam_Title": [exam_title],
+                                "School_Name": [school_name],
+                                "Examiner_Name": [examiner_name],
+                                "Instructions": [instructions],
+                                "Exam_PIN": [exam_pin],
+                                "Start_DateTime": [start_datetime],
+                                "End_DateTime": [end_datetime],
+                                "Timer_Seconds": [timer_seconds],
+                                "Points_Per_Question": [points_per_q],
+                                "Status": ["Active"]
+                            }
+                            
+                            try:
+                                # 5. Connect and append to Google Sheets
+                                df_new_exam = pd.DataFrame(exam_record)
+                                df_new_qs = pd.DataFrame(final_exam_qs)
+                                
+                                df_active = conn.read(worksheet="Active_Exams")
+                                df_active = pd.concat([df_active, df_new_exam], ignore_index=True)
+                                conn.update(worksheet="Active_Exams", data=df_active)
+                                
+                                df_exam_questions = conn.read(worksheet="Exam_Questions")
+                                df_exam_questions = pd.concat([df_exam_questions, df_new_qs], ignore_index=True)
+                                conn.update(worksheet="Exam_Questions", data=df_exam_questions)
+                                
+                                st.success("✅ Exam Successfully Created & Saved to Database!")
+                                # NOTE: We will build the routing logic in the next step to make this link work!
+                                exam_url = f"https://YOUR-APP-URL.streamlit.app/?exam={exam_id}"
+                                st.info(f"**Share this link with students:**\n{exam_url}")
+                            except Exception as e:
+                                st.error(f"Failed to connect to Google Sheets: {e}")
+
+    # ==========================================
+    # TAB 2: EXAM DELETION (Hardcoded Admin Pin)
+    # ==========================================
+    with manage_tab:
+        st.subheader("🗑️ Delete Active Exams")
+        st.warning("Deleting an exam will permanently erase it from Active_Exams, Exam_Questions, and Student_Results.")
+        
+        try:
+            # Fetch active exams dynamically
+            df_active_view = conn.read(worksheet="Active_Exams", ttl="1m")
+            active_exams_list = ["Select an exam..."] + df_active_view["Exam_ID"].dropna().tolist()
+        except:
+            active_exams_list = ["Select an exam..."]
+            
+        exam_to_delete = st.selectbox("Select Exam to Delete", active_exams_list) 
+        
+        # Security Check using your existing master bypass PIN
+        admin_pin_input = st.text_input("Enter Master Admin PIN to confirm", type="password", key="delete_exam_pin")
+        
+        if st.button("🗑️ Delete Exam Record", type="primary"):
+            if admin_pin_input == "1960": 
+                if exam_to_delete != "Select an exam...":
+                    try:
+                        with st.spinner("Wiping exam records from all databases..."):
+                            # 1. Delete from Active_Exams
+                            df_active = conn.read(worksheet="Active_Exams")
+                            df_active = df_active[df_active["Exam_ID"] != exam_to_delete]
+                            conn.update(worksheet="Active_Exams", data=df_active)
+                            
+                            # 2. Delete from Exam_Questions
+                            df_eq = conn.read(worksheet="Exam_Questions")
+                            if not df_eq.empty and "Exam_ID" in df_eq.columns:
+                                df_eq = df_eq[df_eq["Exam_ID"] != exam_to_delete]
+                                conn.update(worksheet="Exam_Questions", data=df_eq)
+                                
+                            # 3. Delete from Student_Results
+                            try:
+                                df_sr = conn.read(worksheet="Student_Results")
+                                if not df_sr.empty and "Exam_ID" in df_sr.columns:
+                                    df_sr = df_sr[df_sr["Exam_ID"] != exam_to_delete]
+                                    conn.update(worksheet="Student_Results", data=df_sr)
+                            except:
+                                pass # Fails gracefully if Student_Results is empty
+                                
+                            st.success(f"Successfully deleted {exam_to_delete} and all associated records.")
+                            time.sleep(2)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Error during deletion: {e}")
+                else:
+                    st.error("Please select a valid exam to delete.")
+            elif admin_pin_input != "":
+                st.error("❌ Incorrect Admin PIN. Deletion unauthorized.")
