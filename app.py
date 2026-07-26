@@ -369,61 +369,96 @@ if "exam" in st.query_params:
             st.info("No students have submitted results for this exam yet.")
         else:
             st.subheader("📊 Class Overview")
-            # Display a clean summary table of everyone's scores
             display_df = exam_results[["Student_Name", "Class", "Auto_Score", "Manual_Score", "Total_Score"]]
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
             st.write("---")
-            st.subheader("📝 Grade Theory & View Responses")
+            st.subheader("📝 Granular Question-by-Question Grading")
             
-            selected_student = st.selectbox("Select a student to review:", exam_results["Student_Name"].tolist())
+            selected_student = st.selectbox("Select a student to review and grade:", exam_results["Student_Name"].tolist())
 
             if selected_student:
-                # Find the exact row index in the master dataframe
                 student_idx = exam_results[exam_results["Student_Name"] == selected_student].index[0]
                 student_data = exam_results.loc[student_idx]
                 
-                st.markdown(f"**Reviewing:** {student_data['Student_Name']} ({student_data['Class']})")
-                
-                # Grading Box
-                new_manual_score = st.number_input(
-                    "Assign Manual Score (For Theory Questions)", 
-                    value=int(student_data["Manual_Score"]),
-                    step=1
-                )
-                
-                if st.button("💾 Save Score Update", type="primary"):
-                    # Update the specific row
-                    df_results.at[student_idx, "Manual_Score"] = new_manual_score
-                    df_results.at[student_idx, "Total_Score"] = int(student_data["Auto_Score"]) + new_manual_score
-                    
-                    with st.spinner("Saving to database..."):
-                        conn.update(worksheet="Student_Results", data=df_results)
-                    st.success(f"✅ Scores updated for {selected_student}!")
-                    time.sleep(1)
-                    st.rerun()
-                
-                st.write("")
-                st.markdown("### 📄 Detailed Answer Sheet")
+                st.markdown(f"**Reviewing Student:** {student_data['Student_Name']} ({student_data['Class']})")
                 
                 import ast
                 try:
-                    # Safely convert the stringified dictionary back into a usable Python dictionary
                     responses = ast.literal_eval(student_data["Detailed_Responses"])
-                    for q_num, data in responses.items():
-                        st.markdown(f"**{q_num}: {data['Question']}**")
-                        
-                        # Color code: Green for correct MCQ, Red for wrong MCQ, Blue for Theory
-                        if data["Type"] == "Multiple Choice (Objectives)":
-                            color = "#16a34a" if data["Is_Correct"] else "#dc2626"
+                except Exception:
+                    responses = {}
+
+                try:
+                    points_per_q = int(exam_info.get("Points_Per_Question", 1))
+                except Exception:
+                    points_per_q = 1
+
+                # Load existing manual scores dictionary if saved previously, else initialize
+                manual_scores_dict = {}
+                try:
+                    # We can store a dictionary of per-question manual scores inside the row if needed, 
+                    # but let's check a clean approach: parse from a dedicated column or default to 0
+                    pass
+                except Exception:
+                    pass
+
+                updated_manual_breakdown = {}
+                total_auto_calc = 0
+                total_manual_calc = 0
+
+                # Loop through each question to show individual grading controls
+                for q_key, data in responses.items():
+                    st.markdown("---")
+                    q_type = str(data.get("Type", ""))
+                    is_mcq = "multiple" in q_type.lower() or "objective" in q_type.lower()
+                    
+                    col_q, col_score_box = st.columns([3, 1])
+                    
+                    with col_q:
+                        st.markdown(f"**{q_key}: {data['Question']}**")
+                        color = "#16a34a" if (is_mcq and data.get("Is_Correct", False)) else ("#dc2626" if is_mcq else "#0284c7")
+                        st.markdown(f"<div style='background-color: #f8fafc; padding: 8px; border-radius: 5px; border-left: 4px solid {color};'>Student Answer: <b>{data['Student_Answer']}</b></div>", unsafe_allow_html=True)
+
+                    with col_score_box:
+                        if is_mcq:
+                            # Auto-calculated score view for MCQs
+                            awarded = points_per_q if data.get("Is_Correct", False) else 0
+                            total_auto_calc += awarded
+                            st.markdown(f"<br><b>Score: {awarded}/{points_per_q}</b>", unsafe_allow_html=True)
                         else:
-                            color = "#0284c7" # Blue for theory requiring manual grading
-                            
-                        st.markdown(f"<div style='background-color: #f8fafc; padding: 10px; border-radius: 5px; border-left: 4px solid {color};'>Student Answer: <b>{data['Student_Answer']}</b></div>", unsafe_allow_html=True)
-                        st.write(" ")
-                except Exception as e:
-                    st.error("Could not parse detailed responses.")
-                    st.write(student_data["Detailed_Responses"])
+                            # Manual input box right beside the theory question
+                            existing_q_score = int(data.get("Manual_Score_Given", 0))
+                            q_score_input = st.number_input(
+                                f"Score ({q_key})", 
+                                min_value=0, 
+                                max_value=20, 
+                                value=existing_q_score, 
+                                key=f"manual_{student_idx}_{q_key}"
+                            )
+                            data["Manual_Score_Given"] = q_score_input
+                            total_manual_calc += q_score_input
+
+                # If it's pure MCQ, auto score covers it. If there are theory questions, add them up.
+                # Let's aggregate total manual score from all theory fields
+                sum_theory_manual = sum(int(d.get("Manual_Score_Given", 0)) for d in responses.values() if not ("multiple" in str(d.get("Type", "")).lower() or "objective" in str(d.get("Type", "")).lower()))
+                
+                final_calculated_total = total_auto_calc + sum_theory_manual
+
+                st.write("")
+                st.markdown(f"### 🧮 Live Score Summary: Auto ({total_auto_calc}) + Manual ({sum_theory_manual}) = **Total: {final_calculated_total}**")
+
+                if st.button("💾 Save All Grades & Update Total Score", type="primary"):
+                    df_results.at[student_idx, "Auto_Score"] = total_auto_calc
+                    df_results.at[student_idx, "Manual_Score"] = sum_theory_manual
+                    df_results.at[student_idx, "Total_Score"] = final_calculated_total
+                    df_results.at[student_idx, "Detailed_Responses"] = str(responses)
+                    
+                    with st.spinner("Saving grades to database..."):
+                        conn.update(worksheet="Student_Results", data=df_results)
+                    st.success(f"✅ Successfully updated grades for {selected_student}!")
+                    time.sleep(1)
+                    st.rerun()
 st.stop()
 
 # --- AUTHENTICATION STATE ---
