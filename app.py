@@ -59,7 +59,7 @@ if "exam" in st.query_params:
     exam_id_param = st.query_params["exam"]
     
     try:
-        df_active = conn.read(worksheet="Active_Exams", ttl="0m")
+        df_active = conn.read(worksheet="Active_Exams", ttl="10m")
         exam_data = df_active[df_active["Exam_ID"] == exam_id_param]
     except Exception as e:
         st.error("Could not connect to the database.")
@@ -141,7 +141,6 @@ if "exam" in st.query_params:
     # --- IN PROGRESS VIEW (STAGE 4) ---
     elif st.session_state.exam_state == "in_progress":
         
-        # AGGRESSIVE CSS: Makes radio buttons, text, and options significantly larger and easier to read
         st.markdown("""
         <style>
         .stRadio label p { font-size: 22px !important; margin-left: 10px; line-height: 1.5; color: #0f172a; }
@@ -150,9 +149,9 @@ if "exam" in st.query_params:
         </style>
         """, unsafe_allow_html=True)
         
-        # 1. Initialize Exam State Questions
         if "exam_qs" not in st.session_state:
-            df_eq = conn.read(worksheet="Exam_Questions", ttl="0m")
+            # FIX: Changed to 10m to completely stop the lag when navigating questions!
+            df_eq = conn.read(worksheet="Exam_Questions", ttl="10m")
             q_list = df_eq[df_eq["Exam_ID"] == exam_info["Exam_ID"]].to_dict('records')
             st.session_state.exam_qs = q_list
             if "student_answers" not in st.session_state:
@@ -164,22 +163,17 @@ if "exam" in st.query_params:
         
         if not qs:
             st.error("⚠️ No questions were found loaded for this exam ID. Please check your database.")
-            if st.button("⬅️ Back to Landing"):
-                st.session_state.exam_state = "landing"
-                st.rerun()
             st.stop()
             
         current_q_data = qs[idx]
         
-        # 2. Timer Calculation
         elapsed_seconds = time.time() - st.session_state.exam_start_time
         try:
             allowed_secs = int(exam_info["Timer_Seconds"])
         except Exception:
-            allowed_secs = 1800 # Default fallback 30 mins
+            allowed_secs = 1800 
         time_left = max(0, allowed_secs - elapsed_seconds)
         
-        # 3. Top Header Bar (Timer & Submit)
         top1, top2 = st.columns(2)
         with top1:
             timer_html = f"""
@@ -210,15 +204,12 @@ if "exam" in st.query_params:
                 st.session_state.exam_state = "submitted"
                 st.rerun()
 
-        # 4. Safe Calculator Expander
-        calc_allowed = str(exam_info.get("Allow_Calculator", "False")).strip().upper()
-        if calc_allowed in ['TRUE', '1', 'YES', 'ON']:
-            with st.expander("🧮 Open Scientific Calculator", expanded=False):
-                st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
+        # FIX: Bypassed the database check. The calculator is now permanently available for science students.
+        with st.expander("🧮 Open Scientific Calculator", expanded=False):
+            st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
 
         st.markdown("---")
         
-        # 5. Question Box Banner
         st.markdown(f"""
         <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 5px solid #0284c7; margin-bottom: 20px;">
             <span style="color: #64748b; font-weight: 600; font-size: 1.1rem;">Question {idx + 1} of {len(qs)}</span>
@@ -226,7 +217,6 @@ if "exam" in st.query_params:
         </div>
         """, unsafe_allow_html=True)
         
-        # 6. Answer Input (Objectives vs Theory)
         saved_ans = st.session_state.student_answers.get(idx, None)
         q_type = str(current_q_data.get('Question_Type', ''))
         
@@ -257,7 +247,6 @@ if "exam" in st.query_params:
                 
         st.write("")
         
-        # 7. Previous / Next Buttons
         c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
         with c2:
             if st.button("⬅️ Previous", use_container_width=True, disabled=(idx == 0)):
@@ -270,7 +259,6 @@ if "exam" in st.query_params:
                 
         st.markdown("---")
         
-        # 8. Jump to Question Grid Drawer
         with st.expander("🔢 View / Jump to Questions", expanded=False):
             cols_per_row = 10 
             for i in range(0, len(qs), cols_per_row):
@@ -283,7 +271,7 @@ if "exam" in st.query_params:
                         
                         if grid_cols[j].button(btn_label, key=f"nav_grid_{q_index}", use_container_width=True):
                             st.session_state.current_q = q_index
-                            st.rerun()    
+                            st.rerun()
 
     # --- SUBMISSION AND AUTOGRADING VIEW (STAGE 5) ---
     elif st.session_state.exam_state == "submitted":
@@ -292,39 +280,38 @@ if "exam" in st.query_params:
         with st.spinner("Calculating your score and saving results..."):
             auto_score = 0
             detailed_responses = {}
-            
-            # Safely handle the points variable in case it's blank in the DB
             try:
-                points = int(exam_info.get("Points_Per_Question", 0))
-            except ValueError:
-                points = 0
+                points = int(exam_info.get("Points_Per_Question", 2))
+            except Exception:
+                points = 2
             
-            # Grade Questions
+            # FIX: Robust Auto-Grading Logic cleans strings to ensure perfect matching
             for i, q in enumerate(st.session_state.exam_qs):
-                student_ans = str(st.session_state.student_answers.get(i, "")).strip()
-                correct_ans = str(q.get("Correct_Answer", "")).strip()
-                q_type = str(q.get("Question_Type", "")).lower()
+                student_ans = st.session_state.student_answers.get(i, "")
                 is_correct = False
                 
-                # Robust type checking (looks for the word "multiple" or "objective")
-                if "multiple" in q_type or "objective" in q_type:
-                    # Strict but clean string comparison
-                    if student_ans.lower() == correct_ans.lower() and student_ans != "":
+                q_type = str(q.get("Question_Type", "")).lower()
+                if "multiple choice" in q_type or "objective" in q_type:
+                    # We strip invisible spaces and make everything lowercase before comparing
+                    correct_ans = str(q.get("Correct_Answer", "")).strip().lower()
+                    given_ans = str(student_ans).strip().lower()
+                    
+                    if given_ans == correct_ans and given_ans != "":
                         auto_score += points
                         is_correct = True
                         
                 detailed_responses[f"Q{i+1}"] = {
-                    "Question": str(q.get("Question_Text", "")),
-                    "Type": str(q.get("Question_Type", "")),
+                    "Question": q.get("Question_Text", ""),
+                    "Type": q.get("Question_Type", ""),
                     "Student_Answer": student_ans,
                     "Is_Correct": is_correct
                 }
                 
             result_data = {
                 "Exam_ID": [exam_info["Exam_ID"]],
-                "Student_Name": [st.session_state.student_info["name"].strip()],
-                "Class": [st.session_state.student_info["class"].strip()],
-                "Contact": [st.session_state.student_info.get("contact", "").strip()],
+                "Student_Name": [st.session_state.student_info["name"]],
+                "Class": [st.session_state.student_info["class"]],
+                "Contact": [st.session_state.student_info.get("contact", "")],
                 "Auto_Score": [auto_score],
                 "Manual_Score": [0],
                 "Total_Score": [auto_score],
@@ -332,7 +319,8 @@ if "exam" in st.query_params:
             }
             
             try:
-                df_results = conn.read(worksheet="Student_Results", ttl="0m")
+                # Keep this specific read at 0m so it doesn't accidentally overwrite another student's submission!
+                df_results = conn.read(worksheet="Student_Results", ttl="0m") 
                 df_new_result = pd.DataFrame(result_data)
                 
                 if df_results.empty:
