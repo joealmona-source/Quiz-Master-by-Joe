@@ -910,7 +910,11 @@ elif choice == "Exam Mode Setup":
                                 conn.update(worksheet="Exam_Questions", data=df_exam_questions)
                                 
                                 st.success("✅ Exam Successfully Created & Saved to Database!")
-                                exam_url = f"https://YOUR-APP-URL.streamlit.app/?exam={exam_id}"
+                                
+                                # Replace with your actual Streamlit app domain name below:
+                                base_url = "https://quiz-master-by-joe-v8hv3x7blqf35lgjpge6br.streamlit.app"
+                                exam_url = f"{base_url}/?exam={exam_id}"
+                                
                                 st.info(f"**Share this link with students:**\n{exam_url}")
                             except Exception as e:
                                 st.error(f"Failed to connect to Google Sheets: {e}")
