@@ -71,8 +71,9 @@ if "exam" in st.query_params:
         
     exam_info = exam_data.iloc[0]
     
-    st.markdown(f"<h1 style='text-align: center; font-size: 3.5rem; font-weight: 900; color: #0f172a; margin-bottom: 0;'>{exam_info['School_Name']}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<h2 style='text-align: center; font-size: 1.8rem; font-weight: 500; color: #0284c7; margin-top: 0;'>{exam_info['Exam_Title']}</h2>", unsafe_allow_html=True)
+    # 3. Render the Header (Adaptive for Light/Dark Mode)
+    st.markdown(f"<h1 style='text-align: center; color: var(--text-color);'>{exam_info['School_Name']}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center; color: #38bdf8;'>{exam_info['Exam_Title']}</h3>", unsafe_allow_html=True)
     
     if "exam_state" not in st.session_state:
         st.session_state.exam_state = "landing"
@@ -141,9 +142,10 @@ if "exam" in st.query_params:
     # --- IN PROGRESS VIEW (STAGE 4) ---
     elif st.session_state.exam_state == "in_progress":
         
+        # AGGRESSIVE CSS: Adaptive for Dark/Light Mode
         st.markdown("""
         <style>
-        .stRadio label p { font-size: 22px !important; margin-left: 10px; line-height: 1.5; color: #0f172a; }
+        .stRadio label p { font-size: 22px !important; margin-left: 10px; line-height: 1.5; color: var(--text-color) !important; }
         .stRadio div[role="radio"] { transform: scale(1.6); margin-top: 2px; }
         .stRadio > div { gap: 1.5rem !important; }
         </style>
@@ -211,9 +213,9 @@ if "exam" in st.query_params:
         st.markdown("---")
         
         st.markdown(f"""
-        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 5px solid #0284c7; margin-bottom: 20px;">
-            <span style="color: #64748b; font-weight: 600; font-size: 1.1rem;">Question {idx + 1} of {len(qs)}</span>
-            <h3 style="color: #0f172a; margin-top: 10px;">{current_q_data.get('Question_Text', '')}</h3>
+        <div style="background-color: var(--secondary-background-color); padding: 15px; border-radius: 8px; border-left: 5px solid #0284c7; margin-bottom: 20px;">
+            <span style="color: var(--text-color); opacity: 0.7; font-weight: 600; font-size: 1.1rem;">Question {idx + 1} of {len(qs)}</span>
+            <h3 style="color: var(--text-color); margin-top: 10px;">{current_q_data.get('Question_Text', '')}</h3>
         </div>
         """, unsafe_allow_html=True)
         
