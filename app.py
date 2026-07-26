@@ -91,6 +91,17 @@ if "exam" in st.query_params:
             student_contact = st.text_input("Contact / Phone Number (Optional)")
             
             if st.button("🚀 Start Exam", type="primary", use_container_width=True):
+                
+                # --- NEW SECURITY LOCK: Check for Duplicate Entries ---
+                try:
+                    df_results_check = conn.read(worksheet="Student_Results", ttl="0m")
+                    exam_history = df_results_check[df_results_check["Exam_ID"] == exam_info["Exam_ID"]]
+                    # Create a lowercase list of all existing names to prevent case-sensitive bypasses
+                    taken_names = [str(name).strip().lower() for name in exam_history["Student_Name"].dropna().tolist()]
+                except Exception:
+                    taken_names = []
+                # --------------------------------------------------------
+
                 current_time = datetime.now()
                 try:
                     start_dt = datetime.strptime(str(exam_info["Start_DateTime"]), "%Y-%m-%d %H:%M:%S")
@@ -99,17 +110,21 @@ if "exam" in st.query_params:
                     start_dt = pd.to_datetime(exam_info["Start_DateTime"])
                     end_dt = pd.to_datetime(exam_info["End_DateTime"])
 
-                if current_time < start_dt:
+                # --- VALIDATION CASCADE ---
+                if not student_name or not student_class:
+                    st.error("⚠️ Please enter your name and class to begin.")
+                elif student_name.strip().lower() in taken_names:
+                    st.error(f"🛑 Access Denied: A submission for '{student_name.strip()}' has already been recorded. You cannot retake this exam.")
+                elif current_time < start_dt:
                     st.error(f"⏳ **Too Early:** This exam opens on {start_dt.strftime('%B %d, %Y at %I:%M %p')}.")
                 elif current_time > end_dt:
                     st.error("🛑 **Exam Closed:** The submission window for this exam has expired.")
-                elif not student_name or not student_class:
-                    st.error("⚠️ Please enter your name and class to begin.")
                 else:
                     st.session_state.student_info = {"name": student_name, "class": student_class, "contact": student_contact}
                     st.session_state.exam_state = "in_progress"
                     st.session_state.exam_start_time = time.time()
                     st.rerun()
+
                     
         with col2:
             st.subheader("👨‍🏫 Examiner Portal")
@@ -126,11 +141,15 @@ if "exam" in st.query_params:
     # --- IN PROGRESS VIEW (STAGE 4) ---
     elif st.session_state.exam_state == "in_progress":
         
-        # CSS Injection for larger, spaced out radio buttons
+        # AGGRESSIVE CSS: Makes radio buttons, text, and spacing significantly larger
         st.markdown("""
         <style>
-        div[role="radiogroup"] > div { padding-bottom: 15px; }
-        div[role="radiogroup"] label p { font-size: 1.2rem !important; margin-left: 8px; }
+        /* Increase the text size of the options */
+        .stRadio label p { font-size: 22px !important; margin-left: 10px; line-height: 1.5; color: #0f172a; }
+        /* Increase the size of the clickable radio circle */
+        .stRadio div[role="radio"] { transform: scale(1.6); margin-top: 2px; }
+        /* Add more vertical space between each option */
+        .stRadio > div { gap: 1.5rem !important; }
         </style>
         """, unsafe_allow_html=True)
         
@@ -148,10 +167,9 @@ if "exam" in st.query_params:
         elapsed_seconds = time.time() - st.session_state.exam_start_time
         time_left = max(0, int(exam_info["Timer_Seconds"]) - elapsed_seconds)
         
-        top1, top2, top3, top4 = st.columns([2, 1, 1, 1])
-        
+        # Mobile-Friendly Top Layout
+        top1, top2 = st.columns(2)
         with top1:
-            # FIX: JS now clicks the actual primary submit button instead of a hidden one
             timer_html = f"""
             <div id="exam_timer" style="font-size: 1.8rem; font-weight: bold; color: #16a34a; font-family: monospace;"></div>
             <script>
@@ -175,51 +193,17 @@ if "exam" in st.query_params:
             """
             st.components.v1.html(timer_html, height=45)
             
-        with top3:
-            # FIX: Robust check for Google Sheets boolean handling
-            calc_allowed = str(exam_info.get("Allow_Calculator", "")).strip().lower()
-            if calc_allowed in ['true', '1', 'yes', 'on']:
-                with st.popover("🧮 Calculator", use_container_width=True):
-                    st.write("Basic Scientific Calculator")
-                    st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
-                    
-        with top4:
-            if st.button("Submit Exam 🏁", type="primary", use_container_width=True):
+        with top2:
+             if st.button("Submit Exam 🏁", type="primary", use_container_width=True):
                 st.session_state.exam_state = "submitted"
                 st.rerun()
 
-        st.markdown("---")
-        
-        st.markdown(f"""
-        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 5px solid #0284c7; margin-bottom: 20px;">
-            <span style="color: #64748b; font-weight: 600; font-size: 1.1rem;">Question {idx + 1} of {len(qs)}</span>
-            <h3 style="color: #0f172a; margin-top: 10px;">{current_q_data['Question_Text']}</h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        saved_ans = st.session_state.student_answers.get(idx, None)
-        
-        if current_q_data['Question_Type'] == "Multiple Choice (Objectives)":
-            options = [opt.strip() for opt in str(current_q_data['Options']).split(",")]
-            selection = st.radio("Select your answer:", options, index=options.index(saved_ans) if saved_ans in options else None, key=f"q_{idx}")
-            if selection:
-                st.session_state.student_answers[idx] = selection
-        else:
-            theory_ans = st.text_area("Type your answer here:", value=saved_ans if saved_ans else "", key=f"q_{idx}", height=150)
-            if theory_ans:
-                st.session_state.student_answers[idx] = theory_ans
-                
-        st.write("")
-        c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-        with c2:
-            if st.button("⬅️ Previous", use_container_width=True, disabled=(idx == 0)):
-                st.session_state.current_q -= 1
-                st.rerun()
-        with c3:
-            if st.button("Next ➡️", use_container_width=True, disabled=(idx == len(qs) - 1)):
-                st.session_state.current_q += 1
-                st.rerun()
-                
+        # FIX: Calculator is now a full-width expander to ensure it renders on mobile
+        calc_allowed = str(exam_info.get("Allow_Calculator", "")).strip().upper()
+        if calc_allowed in ['TRUE', '1', 'YES', 'ON']:
+            with st.expander("🧮 Open Scientific Calculator", expanded=False):
+                st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
+
         st.markdown("---")
         
         # FIX: Housed inside a drawer (expander) to save screen space
@@ -244,31 +228,39 @@ if "exam" in st.query_params:
         with st.spinner("Calculating your score and saving results..."):
             auto_score = 0
             detailed_responses = {}
-            points = int(exam_info["Points_Per_Question"])
             
-            # Grade Objective Questions instantly
+            # Safely handle the points variable in case it's blank in the DB
+            try:
+                points = int(exam_info.get("Points_Per_Question", 0))
+            except ValueError:
+                points = 0
+            
+            # Grade Questions
             for i, q in enumerate(st.session_state.exam_qs):
-                student_ans = st.session_state.student_answers.get(i, "")
+                student_ans = str(st.session_state.student_answers.get(i, "")).strip()
+                correct_ans = str(q.get("Correct_Answer", "")).strip()
+                q_type = str(q.get("Question_Type", "")).lower()
                 is_correct = False
                 
-                if q["Question_Type"] == "Multiple Choice (Objectives)":
-                    if str(student_ans).strip().lower() == str(q["Correct_Answer"]).strip().lower():
+                # Robust type checking (looks for the word "multiple" or "objective")
+                if "multiple" in q_type or "objective" in q_type:
+                    # Strict but clean string comparison
+                    if student_ans.lower() == correct_ans.lower() and student_ans != "":
                         auto_score += points
                         is_correct = True
                         
                 detailed_responses[f"Q{i+1}"] = {
-                    "Question": q["Question_Text"],
-                    "Type": q["Question_Type"],
+                    "Question": str(q.get("Question_Text", "")),
+                    "Type": str(q.get("Question_Type", "")),
                     "Student_Answer": student_ans,
                     "Is_Correct": is_correct
                 }
                 
-            # Compile results for the database matching your column headers perfectly
             result_data = {
                 "Exam_ID": [exam_info["Exam_ID"]],
-                "Student_Name": [st.session_state.student_info["name"]],
-                "Class": [st.session_state.student_info["class"]],
-                "Contact": [st.session_state.student_info.get("contact", "")],
+                "Student_Name": [st.session_state.student_info["name"].strip()],
+                "Class": [st.session_state.student_info["class"].strip()],
+                "Contact": [st.session_state.student_info.get("contact", "").strip()],
                 "Auto_Score": [auto_score],
                 "Manual_Score": [0],
                 "Total_Score": [auto_score],
@@ -279,7 +271,6 @@ if "exam" in st.query_params:
                 df_results = conn.read(worksheet="Student_Results", ttl="0m")
                 df_new_result = pd.DataFrame(result_data)
                 
-                # Append and Update
                 if df_results.empty:
                     df_updated = df_new_result
                 else:
@@ -291,15 +282,84 @@ if "exam" in st.query_params:
             except Exception as e:
                 st.error(f"⚠️ Error saving results: {e}")
         
-    # --- EXAMINER DASHBOARD VIEW ---
+    # --- EXAMINER DASHBOARD VIEW (STAGE 6) ---
     elif st.session_state.exam_state == "examiner_dashboard":
-         st.info("Loading Student Scores... (Coming Next)")
-         if st.button("⬅️ Back to Landing Page"):
-             st.session_state.exam_state = "landing"
-             st.rerun()
+        st.markdown("<h2 style='text-align: center;'>👨‍🏫 Examiner Dashboard</h2>", unsafe_allow_html=True)
+        
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c1:
+            if st.button("⬅️ Back to Start"):
+                st.session_state.exam_state = "landing"
+                st.rerun()
+                
+        st.write("---")
+        
+        try:
+            df_results = conn.read(worksheet="Student_Results", ttl="0m")
+            exam_results = df_results[df_results["Exam_ID"] == exam_info["Exam_ID"]]
+        except Exception as e:
+            st.error("Could not fetch student results from the database.")
+            exam_results = pd.DataFrame()
 
-    # CRITICAL: Stop the rest of the app from loading!
-    st.stop()
+        if exam_results.empty:
+            st.info("No students have submitted results for this exam yet.")
+        else:
+            st.subheader("📊 Class Overview")
+            # Display a clean summary table of everyone's scores
+            display_df = exam_results[["Student_Name", "Class", "Auto_Score", "Manual_Score", "Total_Score"]]
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+            st.write("---")
+            st.subheader("📝 Grade Theory & View Responses")
+            
+            selected_student = st.selectbox("Select a student to review:", exam_results["Student_Name"].tolist())
+
+            if selected_student:
+                # Find the exact row index in the master dataframe
+                student_idx = exam_results[exam_results["Student_Name"] == selected_student].index[0]
+                student_data = exam_results.loc[student_idx]
+                
+                st.markdown(f"**Reviewing:** {student_data['Student_Name']} ({student_data['Class']})")
+                
+                # Grading Box
+                new_manual_score = st.number_input(
+                    "Assign Manual Score (For Theory Questions)", 
+                    value=int(student_data["Manual_Score"]),
+                    step=1
+                )
+                
+                if st.button("💾 Save Score Update", type="primary"):
+                    # Update the specific row
+                    df_results.at[student_idx, "Manual_Score"] = new_manual_score
+                    df_results.at[student_idx, "Total_Score"] = int(student_data["Auto_Score"]) + new_manual_score
+                    
+                    with st.spinner("Saving to database..."):
+                        conn.update(worksheet="Student_Results", data=df_results)
+                    st.success(f"✅ Scores updated for {selected_student}!")
+                    time.sleep(1)
+                    st.rerun()
+                
+                st.write("")
+                st.markdown("### 📄 Detailed Answer Sheet")
+                
+                import ast
+                try:
+                    # Safely convert the stringified dictionary back into a usable Python dictionary
+                    responses = ast.literal_eval(student_data["Detailed_Responses"])
+                    for q_num, data in responses.items():
+                        st.markdown(f"**{q_num}: {data['Question']}**")
+                        
+                        # Color code: Green for correct MCQ, Red for wrong MCQ, Blue for Theory
+                        if data["Type"] == "Multiple Choice (Objectives)":
+                            color = "#16a34a" if data["Is_Correct"] else "#dc2626"
+                        else:
+                            color = "#0284c7" # Blue for theory requiring manual grading
+                            
+                        st.markdown(f"<div style='background-color: #f8fafc; padding: 10px; border-radius: 5px; border-left: 4px solid {color};'>Student Answer: <b>{data['Student_Answer']}</b></div>", unsafe_allow_html=True)
+                        st.write(" ")
+                except Exception as e:
+                    st.error("Could not parse detailed responses.")
+                    st.write(student_data["Detailed_Responses"])
 
 # --- AUTHENTICATION STATE ---
 if "authenticated" not in st.session_state:
