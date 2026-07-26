@@ -737,12 +737,16 @@ elif choice == "Exam Mode Setup":
                         with st.spinner("Compiling exam and saving to database..."):
                             final_exam_qs = []
                             
-                            # 2. Independent Extraction Logic
+                    # 2. Independent Extraction Logic
                             for subj in subjects:
                                 # Pull Multiple Choice FIRST
                                 if num_mcq > 0:
                                     pool_mcq = selected_qs[(selected_qs["Subject"] == subj) & (selected_qs["Type"] == "Multiple Choice (Objectives)")]
                                     if not pool_mcq.empty:
+                                        # --- NEW WARNING MESSAGE ---
+                                        if len(pool_mcq) < num_mcq:
+                                            st.warning(f"⚠️ Only {len(pool_mcq)} Multiple Choice questions available for {subj} (Requested: {num_mcq}).")
+                                            
                                         sampled_mcq = pool_mcq.sample(n=min(num_mcq, len(pool_mcq)))
                                         for idx, row in sampled_mcq.iterrows():
                                             final_exam_qs.append({
@@ -759,6 +763,10 @@ elif choice == "Exam Mode Setup":
                                 if num_theory > 0:
                                     pool_theory = selected_qs[(selected_qs["Subject"] == subj) & (selected_qs["Type"] == "Short Answer / Theory")]
                                     if not pool_theory.empty:
+                                        # --- NEW WARNING MESSAGE ---
+                                        if len(pool_theory) < num_theory:
+                                            st.warning(f"⚠️ Only {len(pool_theory)} Theory questions available for {subj} (Requested: {num_theory}).")
+                                            
                                         sampled_theory = pool_theory.sample(n=min(num_theory, len(pool_theory)))
                                         for idx, row in sampled_theory.iterrows():
                                             final_exam_qs.append({
