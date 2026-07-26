@@ -54,6 +54,104 @@ st.markdown("""
 # --- GOOGLE SHEETS CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# --- EXAM MODE URL INTERCEPTOR (STAGE 3) ---
+# Check if a student or examiner clicked an exam link
+if "exam" in st.query_params:
+    exam_id_param = st.query_params["exam"]
+    
+    # 1. Fetch Exam Details
+    try:
+        df_active = conn.read(worksheet="Active_Exams", ttl="0m") # Real-time read
+        exam_data = df_active[df_active["Exam_ID"] == exam_id_param]
+    except Exception as e:
+        st.error("Could not connect to the database.")
+        st.stop()
+
+    if exam_data.empty:
+        st.error("❌ This exam link is invalid or the exam has been deleted.")
+        st.stop()
+        
+    exam_info = exam_data.iloc[0]
+    
+    # 2. Strict Time Validation Logic
+    current_time = datetime.now()
+    try:
+        # Parses the date and time format saved to Google Sheets
+        start_dt = datetime.strptime(str(exam_info["Start_DateTime"]), "%Y-%m-%d %H:%M:%S")
+        end_dt = datetime.strptime(str(exam_info["End_DateTime"]), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        # Fallback just in case the format saved slightly differently
+        start_dt = pd.to_datetime(exam_info["Start_DateTime"])
+        end_dt = pd.to_datetime(exam_info["End_DateTime"])
+
+    # 3. Render the Header
+    st.markdown(f"<h1 style='text-align: center; color: #38bdf8;'>{exam_info['Exam_Title']}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center;'>{exam_info['School_Name']}</h3>", unsafe_allow_html=True)
+    
+    # Enforce Time Lock
+    if current_time < start_dt:
+        st.warning(f"⏳ **This exam is scheduled to start on {start_dt.strftime('%B %d, %Y at %I:%M %p')}.** Please check back later.")
+        st.stop()
+    elif current_time > end_dt:
+        st.error("🛑 **This exam has expired.** The submission window is closed.")
+        st.stop()
+        
+    # 4. State Management for the Exam Interface
+    if "exam_state" not in st.session_state:
+        st.session_state.exam_state = "landing"
+        
+    # --- LANDING PAGE VIEW ---
+    if st.session_state.exam_state == "landing":
+        st.write("---")
+        st.markdown(f"**Examiner:** {exam_info['Examiner_Name']}")
+        st.markdown(f"**Instructions:**\n{exam_info['Instructions']}")
+        st.write("---")
+        
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.subheader("📝 Student Details")
+            student_name = st.text_input("Full Name (Surname First)")
+            student_class = st.text_input("Class")
+            student_contact = st.text_input("Phone Number / Email")
+            
+            if st.button("🚀 Start Exam", type="primary", use_container_width=True):
+                if student_name and student_class:
+                    st.session_state.student_info = {
+                        "name": student_name, 
+                        "class": student_class, 
+                        "contact": student_contact
+                    }
+                    st.session_state.exam_state = "in_progress"
+                    # Capture exact start time for the timer
+                    st.session_state.exam_start_time = time.time()
+                    st.rerun()
+                else:
+                    st.error("Please enter your name and class to begin.")
+                    
+        with col2:
+            st.subheader("👨‍🏫 Examiner Portal")
+            entered_pin = st.text_input("Enter Exam PIN", type="password")
+            if st.button("📊 View Scores", use_container_width=True):
+                if entered_pin == str(exam_info["Exam_PIN"]):
+                    st.session_state.exam_state = "examiner_dashboard"
+                    st.rerun()
+                else:
+                    st.error("Incorrect PIN. Access Denied.")
+                    
+    # --- IN PROGRESS VIEW (Placeholder for Stage 4) ---
+    elif st.session_state.exam_state == "in_progress":
+         st.info("Loading Exam Questions... (Stage 4 UI goes here)")
+         
+    # --- EXAMINER DASHBOARD VIEW (Placeholder for Stage 5) ---
+    elif st.session_state.exam_state == "examiner_dashboard":
+         st.info("Loading Student Scores... (Stage 5 UI goes here)")
+         if st.button("⬅️ Back to Landing Page"):
+             st.session_state.exam_state = "landing"
+             st.rerun()
+             
+    # 5. CRITICAL: Stop the rest of the app from loading!
+    st.stop()
+
 # --- AUTHENTICATION STATE ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
