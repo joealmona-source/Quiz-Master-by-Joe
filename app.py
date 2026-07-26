@@ -282,7 +282,7 @@ if "exam" in st.query_params:
             except Exception as e:
                 st.error(f"⚠️ Error saving results: {e}")
         
-    # --- EXAMINER DASHBOARD VIEW (STAGE 6) ---
+    # --- EXAMINER DASHBOARD VIEW (STAGE 5) ---
     elif st.session_state.exam_state == "examiner_dashboard":
         st.markdown("<h2 style='text-align: center;'>👨‍🏫 Examiner Dashboard</h2>", unsafe_allow_html=True)
         
@@ -360,6 +360,7 @@ if "exam" in st.query_params:
                 except Exception as e:
                     st.error("Could not parse detailed responses.")
                     st.write(student_data["Detailed_Responses"])
+st.stop()
 
 # --- AUTHENTICATION STATE ---
 if "authenticated" not in st.session_state:
