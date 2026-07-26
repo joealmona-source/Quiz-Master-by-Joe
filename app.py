@@ -334,8 +334,7 @@ if "exam" in st.query_params:
                 st.info("✅ Your answers have been securely recorded. You may safely close this window.")
                 st.balloons()
             except Exception as e:
-                st.error(f"⚠️ Error saving results: {e}")
-    st.stop() 
+                st.error(f"⚠️ Error saving results: {e}") 
   
     # --- EXAMINER DASHBOARD VIEW (STAGE 5) ---
     elif st.session_state.exam_state == "examiner_dashboard":
