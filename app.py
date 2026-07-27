@@ -71,9 +71,14 @@ if "exam" in st.query_params:
         
     exam_info = exam_data.iloc[0]
     
-    # 3. Render the Header (Adaptive for Light/Dark Mode)
-    st.markdown(f"<h1 style='text-align: center; color: var(--text-color);'>{exam_info['School_Name']}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='text-align: center; color: #38bdf8;'>{exam_info['Exam_Title']}</h3>", unsafe_allow_html=True)
+        # 3. Render the Header (Adaptive for Light/Dark Mode)
+    st.markdown(f"<h1 style='text-align: center; color: var(--text-color);'>{exam_info.get('School_Name', '')}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center; color: #38bdf8;'>{exam_info.get('Exam_Title', '')}</h3>", unsafe_allow_html=True)
+    
+    # --- NEW: Show Examiner Name ---
+    examiner_name = str(exam_info.get('Examiner_Name', '')).strip()
+    if examiner_name and examiner_name.lower() != "nan":
+        st.markdown(f"<p style='text-align: center; color: var(--text-color); opacity: 0.8; font-size: 1.1rem;'><b>Examiner:</b> {examiner_name}</p>", unsafe_allow_html=True)
     
     if "exam_state" not in st.session_state:
         st.session_state.exam_state = "landing"
@@ -224,13 +229,25 @@ if "exam" in st.query_params:
         
         if "Multiple Choice" in q_type or "Objective" in q_type:
             raw_options = str(current_q_data.get('Options', ''))
-            options = [opt.strip() for opt in raw_options.split(",") if opt.strip()]
+            options_list = [opt.strip() for opt in raw_options.split(",") if opt.strip()]
             
-            if options:
+            if options_list:
+                letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+                formatted_options = []
+                
+                # Append A), B), C) dynamically
+                for i, opt in enumerate(options_list):
+                    prefix = f"{letters[i]}) " if i < len(letters) else ""
+                    # Prevent double prefixing if DB already has it
+                    if opt.startswith(tuple(f"{l})" for l in letters)):
+                        formatted_options.append(opt)
+                    else:
+                        formatted_options.append(f"{prefix}{opt}")
+                
                 selection = st.radio(
                     "Select your answer:", 
-                    options, 
-                    index=options.index(saved_ans) if saved_ans in options else None, 
+                    formatted_options, 
+                    index=formatted_options.index(saved_ans) if saved_ans in formatted_options else None, 
                     key=f"q_radio_{idx}"
                 )
                 if selection:
@@ -287,20 +304,39 @@ if "exam" in st.query_params:
             except Exception:
                 points = 2
             
-            # FIX: Robust Auto-Grading Logic cleans strings to ensure perfect matching
+            # FIX: Robust Auto-Grading Logic 
             for i, q in enumerate(st.session_state.exam_qs):
-                student_ans = st.session_state.student_answers.get(i, "")
+                student_ans = str(st.session_state.student_answers.get(i, "")).strip()
                 is_correct = False
                 
                 q_type = str(q.get("Question_Type", "")).lower()
+                
+                # ONLY auto-score multiple choice. Theory stays 0 for manual grading.
                 if "multiple choice" in q_type or "objective" in q_type:
-                    # We strip invisible spaces and make everything lowercase before comparing
-                    correct_ans = str(q.get("Correct_Answer", "")).strip().lower()
-                    given_ans = str(student_ans).strip().lower()
+                    db_correct_ans = str(q.get("Correct_Answer", "")).strip().lower()
                     
-                    if given_ans == correct_ans and given_ans != "":
-                        auto_score += points
-                        is_correct = True
+                    # Split the student's answer into the Letter and the Text
+                    clean_student_text = student_ans.lower()
+                    student_letter = ""
+                    
+                    if ")" in student_ans:
+                        parts = student_ans.split(")", 1)
+                        student_letter = parts[0].strip().lower()  # Gets the 'a', 'b', 'c'
+                        clean_student_text = parts[1].strip().lower()  # Gets the actual answer text
+                        
+                    # Clean the database answer in case you put "C) Irritability" in the DB
+                    clean_db_text = db_correct_ans
+                    if ")" in db_correct_ans:
+                        clean_db_text = db_correct_ans.split(")", 1)[1].strip().lower()
+                        
+                    # 3-Way Match Check:
+                    # 1. Does the text match perfectly?
+                    # 2. OR did you just type "C" in the database, and the student picked option C?
+                    # 3. OR does the exact raw string match?
+                    if clean_student_text != "":
+                        if (clean_student_text == clean_db_text) or (student_letter == db_correct_ans) or (student_ans.lower() == db_correct_ans):
+                            auto_score += points
+                            is_correct = True
                         
                 detailed_responses[f"Q{i+1}"] = {
                     "Question": q.get("Question_Text", ""),
