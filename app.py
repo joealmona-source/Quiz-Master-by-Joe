@@ -304,47 +304,41 @@ if "exam" in st.query_params:
             except Exception:
                 points = 2
             
-            # FIX: Robust Auto-Grading Logic 
+            # FIX: Clean submission block with proper dictionary keys
             for i, q in enumerate(st.session_state.exam_qs):
                 student_ans = str(st.session_state.student_answers.get(i, "")).strip()
                 is_correct = False
                 
                 q_type = str(q.get("Question_Type", "")).lower()
                 
-                # ONLY auto-score multiple choice. Theory stays 0 for manual grading.
+                # Retrieve the correct answer from the database row safely
+                correct_ans = str(q.get("Correct_Answer", "")).strip()
+                
                 if "multiple choice" in q_type or "objective" in q_type:
-                    db_correct_ans = str(q.get("Correct_Answer", "")).strip().lower()
-                    
-                    # Split the student's answer into the Letter and the Text
+                    db_correct_ans = correct_ans.lower()
                     clean_student_text = student_ans.lower()
                     student_letter = ""
                     
                     if ")" in student_ans:
                         parts = student_ans.split(")", 1)
-                        student_letter = parts[0].strip().lower()  # Gets the 'a', 'b', 'c'
-                        clean_student_text = parts[1].strip().lower()  # Gets the actual answer text
+                        student_letter = parts[0].strip().lower()
+                        clean_student_text = parts[1].strip().lower()
                         
-                    # Clean the database answer in case you put "C) Irritability" in the DB
                     clean_db_text = db_correct_ans
                     if ")" in db_correct_ans:
                         clean_db_text = db_correct_ans.split(")", 1)[1].strip().lower()
                         
-                    # 3-Way Match Check:
-                    # 1. Does the text match perfectly?
-                    # 2. OR did you just type "C" in the database, and the student picked option C?
-                    # 3. OR does the exact raw string match?
                     if clean_student_text != "":
                         if (clean_student_text == clean_db_text) or (student_letter == db_correct_ans) or (student_ans.lower() == db_correct_ans):
                             auto_score += points
                             is_correct = True
                         
-                # Inside your Stage 4 Submission Loop:
-                detailed_responses[f"Q{idx+1}"] = {
-                    "Question": q_text,
+                detailed_responses[f"Q{i+1}"] = {
+                    "Question": q.get("Question_Text", ""),
+                    "Type": q.get("Question_Type", ""),
                     "Student_Answer": student_ans,
                     "Is_Correct": is_correct,
-                    "Type": q_type,
-                    "Correct_Answer": correct_ans  # <--- Make sure this line exists!
+                    "Correct_Answer": correct_ans  # Saves it securely for the examiner view!
                 }
                 
             result_data = {
