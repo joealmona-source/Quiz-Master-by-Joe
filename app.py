@@ -338,11 +338,13 @@ if "exam" in st.query_params:
                             auto_score += points
                             is_correct = True
                         
-                detailed_responses[f"Q{i+1}"] = {
-                    "Question": q.get("Question_Text", ""),
-                    "Type": q.get("Question_Type", ""),
+                # Inside your Stage 4 Submission Loop:
+                detailed_responses[f"Q{idx+1}"] = {
+                    "Question": q_text,
                     "Student_Answer": student_ans,
-                    "Is_Correct": is_correct
+                    "Is_Correct": is_correct,
+                    "Type": q_type,
+                    "Correct_Answer": correct_ans  # <--- Make sure this line exists!
                 }
                 
             result_data = {
@@ -444,7 +446,22 @@ if "exam" in st.query_params:
                     with col_q:
                         st.markdown(f"**{q_key}: {data['Question']}**")
                         color = "#16a34a" if (is_mcq and data.get("Is_Correct", False)) else ("#dc2626" if is_mcq else "#0284c7")
-                        st.markdown(f"<div style='background-color: #f8fafc; padding: 8px; border-radius: 5px; border-left: 4px solid {color};'>Student Answer: <b>{data['Student_Answer']}</b></div>", unsafe_allow_html=True)
+                        
+                        # 1. Student Answer Box (Now adaptive to dark/light mode)
+                        st.markdown(f"""
+                        <div style='background-color: var(--secondary-background-color); padding: 8px; border-radius: 5px; border-left: 4px solid {color}; margin-bottom: 4px;'>
+                            <span style='color: var(--text-color);'>Student Answer: <b>{data.get('Student_Answer', '')}</b></span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # 2. Correct Answer Text underneath
+                        # It attempts to grab 'Correct_Answer' from the database dictionary
+                        correct_ans = data.get("Correct_Answer", "Check master question list")
+                        st.markdown(f"""
+                        <div style='padding-left: 10px; margin-bottom: 15px;'>
+                            <span style='color: #10b981; font-size: 0.9em; font-weight: 600;'>✅ Correct Answer: {correct_ans}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
 
                     with col_score_box:
                         if is_mcq:
