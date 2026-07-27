@@ -6,6 +6,7 @@ import random
 import time
 import uuid
 import base64
+import ast
 from datetime import datetime
 import streamlit.components.v1 as components
 from groq import Groq
@@ -59,7 +60,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def process_image_upload(uploaded_file):
     """Validates file size (max 100 KB) and returns base64 string or error message."""
     if uploaded_file is not None:
-        # Check size (100 KB = 100 * 1024 bytes)
         if uploaded_file.size > 100 * 1024:
             return None, "⚠️ File size exceeds the 100 KB limit! Please choose a smaller image."
         bytes_data = uploaded_file.read()
@@ -137,6 +137,7 @@ if "exam" in st.query_params:
                     st.session_state.student_info = {"name": student_name, "class": student_class, "contact": student_contact}
                     st.session_state.exam_state = "in_progress"
                     st.session_state.exam_start_time = time.time()
+                    st.session_state.result_saved = False
                     st.rerun()
 
         with col2:
@@ -214,8 +215,9 @@ if "exam" in st.query_params:
                 st.session_state.exam_state = "submitted"
                 st.rerun()
 
-        with st.expander("🧮 Open Scientific Calculator", expanded=False):
-            st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
+        if str(exam_info.get("Allow_Calculator", "False")).lower() in ["true", "1", "yes"]:
+            with st.expander("🧮 Open Scientific Calculator", expanded=False):
+                st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
 
         st.markdown("---")
         
@@ -300,73 +302,78 @@ if "exam" in st.query_params:
     elif st.session_state.exam_state == "submitted":
         st.success("🎉 Exam Submitted Successfully!")
         
-        with st.spinner("Saving results..."):
-            auto_score = 0
-            detailed_responses = {}
-            try:
-                points = int(exam_info.get("Points_Per_Question", 2))
-            except Exception:
-                points = 2
-            
-            for i, q in enumerate(st.session_state.exam_qs):
-                student_ans = str(st.session_state.student_answers.get(i, "")).strip()
-                is_correct = False
-                q_type = str(q.get("Question_Type", "")).lower()
-                correct_ans = str(q.get("Correct_Answer", "")).strip()
+        if not st.session_state.get("result_saved", False):
+            with st.spinner("Saving results..."):
+                auto_score = 0
+                detailed_responses = {}
+                try:
+                    points = int(exam_info.get("Points_Per_Question", 2))
+                except Exception:
+                    points = 2
                 
-                if "multiple choice" in q_type or "objective" in q_type:
-                    db_correct_ans = correct_ans.lower()
-                    clean_student_text = student_ans.lower()
-                    student_letter = ""
+                for i, q in enumerate(st.session_state.exam_qs):
+                    student_ans = str(st.session_state.student_answers.get(i, "")).strip()
+                    is_correct = False
+                    q_type = str(q.get("Question_Type", "")).lower()
+                    correct_ans = str(q.get("Correct_Answer", "")).strip()
                     
-                    if ")" in student_ans:
-                        parts = student_ans.split(")", 1)
-                        student_letter = parts[0].strip().lower()
-                        clean_student_text = parts[1].strip().lower()
+                    if "multiple choice" in q_type or "objective" in q_type:
+                        db_correct_ans = correct_ans.lower()
+                        clean_student_text = student_ans.lower()
+                        student_letter = ""
                         
-                    clean_db_text = db_correct_ans
-                    if ")" in db_correct_ans:
-                        clean_db_text = db_correct_ans.split(")", 1)[1].strip().lower()
-                        
-                    if clean_student_text != "":
-                        if (clean_student_text == clean_db_text) or (student_letter == db_correct_ans) or (student_ans.lower() == db_correct_ans):
-                            auto_score += points
-                            is_correct = True
-                        
-                detailed_responses[f"Q{i+1}"] = {
-                    "Question": q.get("Question_Text", ""),
-                    "Type": q.get("Question_Type", ""),
-                    "Student_Answer": student_ans,
-                    "Is_Correct": is_correct,
-                    "Correct_Answer": correct_ans
+                        if ")" in student_ans:
+                            parts = student_ans.split(")", 1)
+                            student_letter = parts[0].strip().lower()
+                            clean_student_text = parts[1].strip().lower()
+                            
+                        clean_db_text = db_correct_ans
+                        if ")" in db_correct_ans:
+                            clean_db_text = db_correct_ans.split(")", 1)[1].strip().lower()
+                            
+                        if clean_student_text != "":
+                            if (clean_student_text == clean_db_text) or (student_letter == db_correct_ans) or (student_ans.lower() == db_correct_ans):
+                                auto_score += points
+                                is_correct = True
+                            
+                    detailed_responses[f"Q{i+1}"] = {
+                        "Question": q.get("Question_Text", ""),
+                        "Type": q.get("Question_Type", ""),
+                        "Student_Answer": student_ans,
+                        "Is_Correct": is_correct,
+                        "Correct_Answer": correct_ans
+                    }
+                    
+                result_data = {
+                    "Exam_ID": [exam_info["Exam_ID"]],
+                    "Student_Name": [st.session_state.student_info["name"]],
+                    "Class": [st.session_state.student_info["class"]],
+                    "Contact": [st.session_state.student_info.get("contact", "")],
+                    "Auto_Score": [auto_score],
+                    "Manual_Score": [0],
+                    "Total_Score": [auto_score],
+                    "Detailed_Responses": [str(detailed_responses)]
                 }
                 
-            result_data = {
-                "Exam_ID": [exam_info["Exam_ID"]],
-                "Student_Name": [st.session_state.student_info["name"]],
-                "Class": [st.session_state.student_info["class"]],
-                "Contact": [st.session_state.student_info.get("contact", "")],
-                "Auto_Score": [auto_score],
-                "Manual_Score": [0],
-                "Total_Score": [auto_score],
-                "Detailed_Responses": [str(detailed_responses)]
-            }
-            
-            try:
-                df_results = conn.read(worksheet="Student_Results", ttl="0m") 
-                df_new_result = pd.DataFrame(result_data)
-                
-                if df_results.empty:
-                    df_updated = df_new_result
-                else:
-                    df_updated = pd.concat([df_results, df_new_result], ignore_index=True)
+                try:
+                    df_results = conn.read(worksheet="Student_Results", ttl="0m") 
+                    df_new_result = pd.DataFrame(result_data)
                     
-                conn.update(worksheet="Student_Results", data=df_updated)
-                st.info("✅ Your answers have been securely recorded. You may safely close this window.")
-                st.balloons()
-            except Exception as e:
-                st.error(f"⚠️ Error saving results: {e}") 
-  
+                    if df_results.empty:
+                        df_updated = df_new_result
+                    else:
+                        df_updated = pd.concat([df_results, df_new_result], ignore_index=True)
+                        
+                    conn.update(worksheet="Student_Results", data=df_updated)
+                    st.cache_data.clear()
+                    st.session_state.result_saved = True
+                    st.info("✅ Your answers have been securely recorded. You may safely close this window.")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"⚠️ Error saving results: {e}") 
+        else:
+            st.info("✅ Your answers have been securely recorded. You may safely close this window.")
+
     # --- EXAMINER DASHBOARD VIEW ---
     elif st.session_state.exam_state == "examiner_dashboard":
         st.markdown("<h2 style='text-align: center;'>👨‍🏫 Examiner Dashboard</h2>", unsafe_allow_html=True)
@@ -404,11 +411,15 @@ if "exam" in st.query_params:
                 
                 st.markdown(f"**Reviewing Student:** {student_data['Student_Name']} ({student_data['Class']})")
                 
-                import ast
-                try:
-                    responses = ast.literal_eval(student_data["Detailed_Responses"])
-                except Exception:
-                    responses = {}
+                # Persist grading state across widget interactions
+                if "grading_student" not in st.session_state or st.session_state.grading_student != selected_student:
+                    st.session_state.grading_student = selected_student
+                    try:
+                        st.session_state.grading_responses = ast.literal_eval(student_data["Detailed_Responses"])
+                    except Exception:
+                        st.session_state.grading_responses = {}
+
+                responses = st.session_state.grading_responses
 
                 try:
                     points_per_q = int(exam_info.get("Points_Per_Question", 1))
@@ -473,6 +484,7 @@ if "exam" in st.query_params:
                     
                     with st.spinner("Saving grades to database..."):
                         conn.update(worksheet="Student_Results", data=df_results)
+                        st.cache_data.clear()
                     st.success(f"✅ Successfully updated grades for {selected_student}!")
                     time.sleep(1)
                     st.rerun()
@@ -640,6 +652,7 @@ if choice == "Class & Subjects Setting":
                                 df_quiz.loc[df_quiz["Class"] == cls_to_edit, "Class"] = new_cls_name
                                 try:
                                     conn.update(worksheet="Questions", data=df_quiz)
+                                    st.cache_data.clear()
                                 except Exception as e:
                                     st.error(f"Failed to update questions database: {e}")
                             save_classes()
@@ -692,6 +705,7 @@ if choice == "Class & Subjects Setting":
                                 df_quiz.loc[df_quiz["Subject"] == sub_to_edit, "Subject"] = new_name
                                 try:
                                     conn.update(worksheet="Questions", data=df_quiz)
+                                    st.cache_data.clear()
                                 except Exception as e:
                                     st.error(f"Failed to update questions in Google Sheets: {e}")
                             save_subjects()
@@ -929,8 +943,8 @@ elif choice == "View Quiz Bank":
                 df_quiz.update(updated_subset)
                 try:
                     conn.update(worksheet="Questions", data=df_quiz)
-                    st.success("Changes saved successfully to Google Sheets!")
                     st.cache_data.clear()
+                    st.success("Changes saved successfully to Google Sheets!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Failed to update database: {e}")
@@ -943,8 +957,8 @@ elif choice == "View Quiz Bank":
                     df_quiz = df_quiz.drop(indices_to_delete).reset_index(drop=True)
                     try:
                         conn.update(worksheet="Questions", data=df_quiz)
-                        st.success("Selected records removed successfully!")
                         st.cache_data.clear()
+                        st.success("Selected records removed successfully!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Failed to delete records in Google Sheets: {e}")
@@ -1296,6 +1310,7 @@ elif choice == "Exam Mode Setup":
                                 df_exam_questions = conn.read(worksheet="Exam_Questions")
                                 df_exam_questions = pd.concat([df_exam_questions, df_new_qs], ignore_index=True)
                                 conn.update(worksheet="Exam_Questions", data=df_exam_questions)
+                                st.cache_data.clear()
                                 
                                 st.success("✅ Exam Successfully Created & Saved to Database!")
                                 base_url = "https://quiz-master-by-joe-v8hv3x7blqf35lgjpge6br.streamlit.app"
@@ -1339,6 +1354,7 @@ elif choice == "Exam Mode Setup":
                             except Exception:
                                 pass
                                 
+                            st.cache_data.clear()
                             st.success(f"Successfully deleted {exam_to_delete} and all associated records.")
                             time.sleep(2)
                             st.rerun()
