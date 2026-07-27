@@ -154,7 +154,11 @@ if "exam" in st.query_params:
                 else:
                     st.session_state.student_info = {"name": student_name, "class": student_class, "contact": student_contact}
                     st.session_state.exam_state = "in_progress"
-                    st.session_state.exam_start_time = time.time()
+                    try:
+                        allowed_secs = int(exam_info["Timer_Seconds"])
+                    except Exception:
+                        allowed_secs = 1800
+                    st.session_state.exam_end_timestamp_ms = int(time.time() * 1000) + (allowed_secs * 1000)
                     st.rerun()
 
         with col2:
@@ -184,6 +188,13 @@ if "exam" in st.query_params:
             if "student_answers" not in st.session_state:
                 st.session_state.student_answers = {} 
             st.session_state.current_q = 0
+
+        if "exam_end_timestamp_ms" not in st.session_state:
+            try:
+                allowed_secs = int(exam_info["Timer_Seconds"])
+            except Exception:
+                allowed_secs = 1800 
+            st.session_state.exam_end_timestamp_ms = int(time.time() * 1000) + (allowed_secs * 1000)
             
         qs = st.session_state.exam_qs
         idx = st.session_state.current_q
@@ -194,32 +205,35 @@ if "exam" in st.query_params:
             
         current_q_data = qs[idx]
         
-        elapsed_seconds = time.time() - st.session_state.exam_start_time
-        try:
-            allowed_secs = int(exam_info["Timer_Seconds"])
-        except Exception:
-            allowed_secs = 1800 
-        time_left = max(0, allowed_secs - elapsed_seconds)
-        
-        top1, top2 = st.columns(2)
+        top1, top2 = st.columns([1.5, 1.2])
         with top1:
             timer_html = f"""
-            <div id="exam_timer" style="font-size: 1.8rem; font-weight: bold; color: #16a34a; font-family: monospace;"></div>
+            <div id="exam_timer" style="font-size: 1.6rem; font-weight: bold; color: #16a34a; font-family: monospace; padding-top: 5px;"></div>
             <script>
-            var timeLeft = {time_left};
+            var endTime = {st.session_state.exam_end_timestamp_ms};
             var elem = document.getElementById('exam_timer');
             var timerId = setInterval(function() {{
+                var timeLeft = Math.floor((endTime - Date.now()) / 1000);
                 if (timeLeft <= 0) {{ 
-                    clearInterval(timerId); elem.innerHTML = "00:00"; elem.style.color = "red";
+                    clearInterval(timerId); 
+                    elem.innerHTML = "00:00"; 
+                    elem.style.color = "red";
                     var btns = window.parent.document.querySelectorAll('button');
                     for(var i=0; i<btns.length; i++) {{
-                        if(btns[i].innerText.includes('Submit Exam')) {{ btns[i].click(); }}
+                        if(btns[i].innerText.includes('Submit')) {{ btns[i].click(); }}
                     }}
                 }} else {{
-                    var m = Math.floor(timeLeft / 60); var s = Math.floor(timeLeft % 60);
-                    elem.innerHTML = "⏱️ " + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                    var h = Math.floor(timeLeft / 3600);
+                    var m = Math.floor((timeLeft % 3600) / 60);
+                    var s = Math.floor(timeLeft % 60);
+                    
+                    if (h > 0) {{
+                        elem.innerHTML = "⏱️ " + (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                    }} else {{
+                        elem.innerHTML = "⏱️ " + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                    }}
+                    
                     if(timeLeft < 120) {{ elem.style.color = "#dc2626"; }}
-                    timeLeft--;
                 }}
             }}, 1000);
             </script>
@@ -227,9 +241,16 @@ if "exam" in st.query_params:
             st.components.v1.html(timer_html, height=45)
             
         with top2:
-             if st.button("Submit Exam 🏁", type="primary", use_container_width=True):
-                st.session_state.exam_state = "submitted"
-                st.rerun()
+            b_col1, b_col2 = st.columns(2)
+            with b_col1:
+                if st.button("Submit 🏁", type="primary", use_container_width=True):
+                    st.session_state.exam_state = "submitted"
+                    st.rerun()
+            with b_col2:
+                if st.button("Quit ❌", use_container_width=True):
+                    for k in ["exam_state", "exam_qs", "student_answers", "current_q", "exam_end_timestamp_ms", "student_info"]:
+                        st.session_state.pop(k, None)
+                    st.rerun()
 
         with st.expander("🧮 Open Scientific Calculator", expanded=False):
             st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
@@ -1037,8 +1058,14 @@ elif choice == "Live Competition Mode":
                         var timeLeft = Math.floor((endTime - Date.now()) / 1000);
                         if (timeLeft <= 0) {{ elem.innerHTML = "🚨 TIME UP!"; }} 
                         else {{
-                            var m = Math.floor(timeLeft / 60); var s = timeLeft % 60;
-                            elem.innerHTML = "⏱️ " + m + "m " + (s < 10 ? "0" : "") + s + "s";
+                            var h = Math.floor(timeLeft / 3600);
+                            var m = Math.floor((timeLeft % 3600) / 60);
+                            var s = timeLeft % 60;
+                            if (h > 0) {{
+                                elem.innerHTML = "⏱️ " + (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                            }} else {{
+                                elem.innerHTML = "⏱️ " + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+                            }}
                         }}
                     }}
                     updateTimer(); setInterval(updateTimer, 1000);
