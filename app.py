@@ -217,6 +217,18 @@ if "exam" in st.query_params:
         st.markdown(f"<div style='text-align: center; font-style: italic; font-size: 1.1rem; color: #475569;'><b>Instructions:</b><br>{exam_info['Instructions']}</div>", unsafe_allow_html=True)
         st.write("---")
         
+        st.warning(
+            """
+            **🔒 STRICT EXAM SECURITY RULES & WARNING:**
+            * **No Copying or Text Selection:** Copying question text or using inspect tools is strictly disabled.
+            * **No Screenshots or Screen Recording:** Capturing exam content is monitored and prohibited.
+            * **Tab Switching / Window Minimizing:** You are **NOT** allowed to switch tabs or minimize this browser window. 
+              * **3-Strike Policy:** You are allowed a maximum of **3 warnings**.
+              * **Automatic Submission:** On your **4th attempt/violation**, your exam will be **automatically submitted** immediately without notice.
+            """,
+            icon="⚠️"
+        )
+        
         col1, col2 = st.columns([2, 1])
         with col1:
             st.subheader("📝 Student Registration")
@@ -280,18 +292,6 @@ if "exam" in st.query_params:
         
         # --- INJECT SECURITY HANDLERS ---
         inject_exam_security()
-        
-        st.warning(
-            """
-            **🔒 STRICT EXAM SECURITY RULES & WARNING:**
-            * **No Copying or Text Selection:** Copying question text or using inspect tools is strictly disabled.
-            * **No Screenshots or Screen Recording:** Capturing exam content is monitored and prohibited.
-            * **Tab Switching / Window Minimizing:** You are **NOT** allowed to switch tabs or minimize this browser window. 
-              * **3-Strike Policy:** You are allowed a maximum of **3 warnings**.
-              * **Automatic Submission:** On your **4th attempt/violation**, your exam will be **automatically submitted** immediately without notice.
-            """,
-            icon="⚠️"
-        )
         
         if "exam_qs" not in st.session_state:
             df_eq = conn.read(worksheet="Exam_Questions", ttl="10m")
