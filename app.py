@@ -83,6 +83,7 @@ def confirm_quit_modal():
             st.rerun()
 
 def inject_exam_security():
+    exam_id = st.query_params.get("exam", "")
     st.markdown(
         """
         <style>
@@ -105,99 +106,106 @@ def inject_exam_security():
     )
 
     components.html(
-        """
+        f"""
         <script>
-        (function() {
-            // Target window.parent (the Streamlit app), bypassing window.top to avoid strict CORS block
+        (function() {{
             let targetWin = window;
             let targetDoc = document;
-            try {
-                if (window.parent && window.parent.document) {
+            try {{
+                if (window.parent && window.parent.document) {{
                     targetWin = window.parent;
                     targetDoc = window.parent.document;
-                }
-            } catch (e) {
-                console.warn("Could not access parent window:", e);
-            }
+                }}
+            }} catch (e) {{
+                console.warn("Could not access parent window, utilizing iframe scope:", e);
+            }}
 
             // Flag exam as active in this session
-            try {
+            try {{
                 sessionStorage.setItem("exam_active", "true");
-            } catch(e) {}
+            }} catch(e) {{}}
 
             // Ensure listeners are only attached ONCE per browser load
             if (targetWin.__examSecurityInitialized) return;
             targetWin.__examSecurityInitialized = true;
 
-            function isActive() {
-                try {
+            function isActive() {{
+                try {{
                     return sessionStorage.getItem("exam_active") === "true";
-                } catch(e) { return false; }
-            }
+                }} catch(e) {{ return false; }}
+            }}
 
-            function getStrikes() {
-                try {
+            function getStrikes() {{
+                try {{
                     return parseInt(sessionStorage.getItem("exam_strikes") || "0");
-                } catch(e) {
+                }} catch(e) {{
                     return 0;
-                }
-            }
+                }}
+            }}
 
-            function setStrikes(val) {
-                try {
+            function setStrikes(val) {{
+                try {{
                     sessionStorage.setItem("exam_strikes", val.toString());
-                } catch(e) {}
-            }
+                }} catch(e) {{}}
+            }}
 
             let lastViolationTime = 0;
 
-            function handleViolation(reason) {
-                if (!isActive()) return; // Don't log strikes on the landing or success pages
+            function handleViolation(reason) {{
+                if (!isActive()) return; 
                 
                 let now = Date.now();
-                // 1.5s cooldown debounce to avoid double counting blur + visibilitychange
                 if (now - lastViolationTime < 1500) return;
                 lastViolationTime = now;
 
                 let strikes = getStrikes() + 1;
                 setStrikes(strikes);
 
-                if (strikes <= 3) {
-                    alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\\n\\nYou ${reason}. Leaving or minimizing the exam window 4 times will automatically submit your exam!`);
-                } else {
+                if (strikes <= 3) {{
+                    alert(`⚠️ SECURITY WARNING (${{strikes}}/3 Attempts Used)\\n\\nYou ${{reason}}. Leaving or minimizing the exam window 4 times will automatically submit your exam!`);
+                }} else {{
                     alert("❌ VIOLATION LIMIT EXCEEDED!\\n\\nYou have left or minimized the exam tab 4 times. Your exam is now automatically submitting.");
-                    try {
-                        const url = new URL(targetWin.location.href);
-                        url.searchParams.set("autosubmit", "1");
-                        targetWin.location.href = url.href;
-                    } catch(e) {
-                        targetWin.location.search = targetWin.location.search + (targetWin.location.search.includes('?') ? '&' : '?') + "autosubmit=1";
-                    }
-                }
-            }
+                    
+                    // FIX: Secure Cross-Origin Parent Navigation
+                    let targetUrl = "";
+                    try {{
+                        if (document.referrer) {{
+                            let rUrl = new URL(document.referrer);
+                            rUrl.searchParams.set("exam", "{exam_id}");
+                            rUrl.searchParams.set("autosubmit", "1");
+                            targetUrl = rUrl.href;
+                        }} else {{
+                            targetUrl = "https://quiz-master-by-joe-v8hv3x7blqf35lgjpge6br.streamlit.app/?exam={exam_id}&autosubmit=1";
+                        }}
+                        window.open(targetUrl, '_top');
+                    }} catch(err) {{
+                        console.error("Autosubmit failed:", err);
+                    }}
+                }}
+            }}
 
             // 1. Tab-switch detection
-            targetDoc.addEventListener("visibilitychange", function() {
-                if (targetDoc.hidden || targetDoc.visibilityState === "hidden") {
+            targetDoc.addEventListener("visibilitychange", function() {{
+                if (targetDoc.hidden || targetDoc.visibilityState === "hidden") {{
                     handleViolation("switched tabs or minimized the browser");
-                }
-            });
+                }}
+            }});
 
             // 2. Window minimize / focus-loss detection
-            targetWin.addEventListener("blur", function() {
+            targetWin.addEventListener("blur", function() {{
                 handleViolation("left or minimized the exam window");
-            });
+            }});
 
             // Prevent shortcuts and context menu only when exam is active
-            targetDoc.addEventListener('contextmenu', e => {
+            targetDoc.addEventListener('contextmenu', e => {{
                 if(isActive()) e.preventDefault();
-            });
-            targetDoc.addEventListener('keydown', e => {
-                if (isActive() && e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {
+            }});
+            targetDoc.addEventListener('keydown', e => {{
+                if (isActive() && e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {{
                     e.preventDefault();
-                }
-            });
-        })();
+                }}
+            }});
+        }})();
         </script>
         """,
         height=0,
@@ -352,6 +360,13 @@ if "exam" in st.query_params:
                     st.error("Incorrect PIN. Access Denied.")
 
     elif st.session_state.exam_state == "in_progress":
+        
+        # --- PYTHON SAFETY NET TIMER CHECK ---
+        # Forces immediate submission if user interacts with page after time expires natively
+        if "exam_end_timestamp_ms" in st.session_state and int(time.time() * 1000) >= st.session_state.exam_end_timestamp_ms:
+            st.session_state.exam_state = "submitted"
+            st.rerun()
+            
         st.markdown("""
         <style>
         .stRadio label p { font-size: 22px !important; margin-left: 10px; line-height: 1.5; color: var(--text-color) !important; }
@@ -400,13 +415,21 @@ if "exam" in st.query_params:
                     clearInterval(timerId); 
                     elem.innerHTML = "00:00"; 
                     elem.style.color = "red";
-                    let targetWin = window.parent || window;
+                    
+                    // FIX: Secure Cross-Origin Parent Navigation
+                    var targetUrl = "";
                     try {{
-                        const url = new URL(targetWin.location.href);
-                        url.searchParams.set("autosubmit", "1");
-                        targetWin.location.href = url.href;
-                    }} catch(e) {{
-                        targetWin.location.search = "?autosubmit=1";
+                        if (document.referrer) {{
+                            var rUrl = new URL(document.referrer);
+                            rUrl.searchParams.set("exam", "{exam_info['Exam_ID']}");
+                            rUrl.searchParams.set("autosubmit", "1");
+                            targetUrl = rUrl.href;
+                        }} else {{
+                            targetUrl = "https://quiz-master-by-joe-v8hv3x7blqf35lgjpge6br.streamlit.app/?exam={exam_info['Exam_ID']}&autosubmit=1";
+                        }}
+                        window.open(targetUrl, '_top');
+                    }} catch(err) {{
+                        console.error("Autosubmit failed:", err);
                     }}
                 }} else {{
                     var h = Math.floor(timeLeft / 3600);
