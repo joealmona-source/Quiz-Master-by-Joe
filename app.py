@@ -13,6 +13,11 @@ import streamlit.components.v1 as components
 from groq import Groq
 from streamlit_gsheets import GSheetsConnection
 
+# --- REPORTLAB PDF IMPORTS ---
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+from reportlab.lib import colors
+
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
 # --- SYSTEM INITIALIZATION & SESSION STATE ---
@@ -51,6 +56,42 @@ st.markdown("""
 
 # --- GOOGLE SHEETS CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+# ==============================================================================
+# PDF HELPER FUNCTION
+# ==============================================================================
+def generate_class_overview_pdf(dataframe):
+    """
+    Generates a PDF object from the class scores dataframe.
+    Excludes the grading corrections fields from the final export.
+    """
+    df_export = dataframe.copy()
+    
+    # Exclude internal grading/correction fields for a clean professional report
+    columns_to_exclude = ["grading_corrections", "Detailed_Responses"]
+    df_export = df_export.drop(columns=[col for col in columns_to_exclude if col in df_export.columns])
+    
+    buffer = BytesIO()
+    pdf = SimpleDocTemplate(buffer, pagesize=letter)
+    
+    data = [df_export.columns.to_list()] + df_export.values.tolist()
+    
+    table = Table(data)
+    style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.dimgrey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.whitesmoke),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ])
+    table.setStyle(style)
+    
+    pdf.build([table])
+    buffer.seek(0)
+    return buffer.getvalue()
+
 
 # ==============================================================================
 # SECURITY & CONFIRMATION MODALS
@@ -657,6 +698,16 @@ if "exam" in st.query_params:
             st.subheader("📊 Class Overview")
             display_df = exam_results[["Student_Name", "Class", "Auto_Score", "Manual_Score", "Total_Score"]]
             st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+            # --- ADDED PDF DOWNLOAD BUTTON FOR CLASS OVERVIEW ---
+            pdf_bytes = generate_class_overview_pdf(display_df)
+            st.download_button(
+                label="📥 Download Class Overview as PDF",
+                data=pdf_bytes,
+                file_name=f"{exam_info.get('Exam_Title', 'Exam')}_Class_Overview.pdf",
+                mime="application/pdf",
+                type="primary"
+            )
 
             st.write("---")
             st.subheader("📝 Granular Question-by-Question Grading")
