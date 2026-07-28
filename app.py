@@ -83,7 +83,6 @@ def confirm_quit_modal():
             st.rerun()
 
 def inject_exam_security():
-    exam_id = st.query_params.get("exam", "")
     st.markdown(
         """
         <style>
@@ -106,102 +105,107 @@ def inject_exam_security():
     )
 
     components.html(
-        f"""
+        """
         <script>
-        (function() {{
+        (function() {
+            // Target window.parent (the Streamlit app), bypassing window.top to avoid strict CORS block
             let targetWin = window;
             let targetDoc = document;
-            try {{
-                if (window.parent && window.parent.document) {{
+            try {
+                if (window.parent && window.parent.document) {
                     targetWin = window.parent;
                     targetDoc = window.parent.document;
-                }}
-            }} catch (e) {{
-                console.warn("Could not access parent window, utilizing iframe scope:", e);
-            }}
+                }
+            } catch (e) {
+                console.warn("Could not access parent window:", e);
+            }
 
             // Flag exam as active in this session
-            try {{
+            try {
                 sessionStorage.setItem("exam_active", "true");
-            }} catch(e) {{}}
+            } catch(e) {}
 
             // Ensure listeners are only attached ONCE per browser load
             if (targetWin.__examSecurityInitialized) return;
             targetWin.__examSecurityInitialized = true;
 
-            function isActive() {{
-                try {{
+            function isActive() {
+                try {
                     return sessionStorage.getItem("exam_active") === "true";
-                }} catch(e) {{ return false; }}
-            }}
+                } catch(e) { return false; }
+            }
 
-            function getStrikes() {{
-                try {{
+            function getStrikes() {
+                try {
                     return parseInt(sessionStorage.getItem("exam_strikes") || "0");
-                }} catch(e) {{
+                } catch(e) {
                     return 0;
-                }}
-            }}
+                }
+            }
 
-            function setStrikes(val) {{
-                try {{
+            function setStrikes(val) {
+                try {
                     sessionStorage.setItem("exam_strikes", val.toString());
-                }} catch(e) {{}}
-            }}
+                } catch(e) {}
+            }
 
             let lastViolationTime = 0;
 
-            function handleViolation(reason) {{
-                if (!isActive()) return; 
+            function handleViolation(reason) {
+                if (!isActive()) return; // Don't log strikes on the landing or success pages
                 
                 let now = Date.now();
+                // 1.5s cooldown debounce to avoid double counting blur + visibilitychange
                 if (now - lastViolationTime < 1500) return;
                 lastViolationTime = now;
 
                 let strikes = getStrikes() + 1;
                 setStrikes(strikes);
 
-                if (strikes <= 3) {{
-                    alert(`⚠️ SECURITY WARNING (${{strikes}}/3 Attempts Used)\\n\\nYou ${{reason}}. Leaving or minimizing the exam window 4 times will automatically submit your exam!`);
-                }} else {{
-                    alert("❌ VIOLATION LIMIT EXCEEDED!\\n\\nYou have left or minimized the exam tab 4 times. Your exam is now automatically submitting.");
+                if (strikes <= 3) {
+                    alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\\n\\nYou ${reason}. Leaving or minimizing the exam window 4 times will automatically submit your exam!`);
+                } else {
+                    // SILENT AUTO SUBMIT TRIGGER (No warning popup on the 4th strike)
+                    const buttons = Array.from(targetWin.document.querySelectorAll('button'));
+                    const autoSubmitBtn = buttons.find(btn => btn.innerText.includes('AUTO_SUBMIT_HIDDEN'));
                     
-                    // Restored Direct Parent Location Refresh Trigger
-                    try {{
-                        let currentHref = window.parent.location.href;
-                        if (!currentHref.includes("exam=")) {{
-                            currentHref = window.location.href;
-                        }}
-                        let separator = currentHref.includes("?") ? "&" : "?";
-                        window.parent.location.href = currentHref + separator + "autosubmit=1";
-                    catch(err) {{
-                        window.location.href = window.location.href + (window.location.href.includes("?") ? "&" : "?") + "autosubmit=1";
-                    }}
-                }}
-            }}
+                    if (autoSubmitBtn) {
+                        autoSubmitBtn.click();
+                    } else {
+                        // URL Fallback if button isn't found
+                        try {
+                            const url = new URL(targetWin.location.href);
+                            url.searchParams.set("autosubmit", "1");
+                            targetWin.location.href = url.href;
+                        } catch(e) {
+                            targetWin.location.search = targetWin.location.search + (targetWin.location.search.includes('?') ? '&' : '?') + "autosubmit=1";
+                        }
+                    }
+                }
+            }
 
             // 1. Tab-switch detection
-            targetDoc.addEventListener("visibilitychange", function() {{
-                if (targetDoc.hidden || targetDoc.visibilityState === "hidden") {{
+            targetDoc.addEventListener("visibilitychange", function() {
+                if (targetDoc.hidden || targetDoc.visibilityState === "hidden") {
                     handleViolation("switched tabs or minimized the browser");
-                }}
-            }});
+                }
+            });
 
             // 2. Window minimize / focus-loss detection
-            targetWin.addEventListener("blur", function() {{
+            targetWin.addEventListener("blur", function() {
                 handleViolation("left or minimized the exam window");
-            }});
+            });
 
             // Prevent shortcuts and context menu only when exam is active
-            targetDoc.addEventListener('contextmenu', e => {{
+            targetDoc.addEventListener('contextmenu', e => {
                 if(isActive()) e.preventDefault();
-            }});
-            targetDoc.addEventListener('keydown', e => {{
-                if (isActive() && e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {{
+            });
+            targetDoc.addEventListener('keydown', e => {
+                if (isActive() && e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {
                     e.preventDefault();
-                }}
-            }});
-        }})();
+                }
+            });
+        })();
         </script>
         """,
         height=0,
@@ -356,12 +360,6 @@ if "exam" in st.query_params:
                     st.error("Incorrect PIN. Access Denied.")
 
     elif st.session_state.exam_state == "in_progress":
-        
-        # --- PYTHON SAFETY NET TIMER CHECK ---
-        if "exam_end_timestamp_ms" in st.session_state and int(time.time() * 1000) >= st.session_state.exam_end_timestamp_ms:
-            st.session_state.exam_state = "submitted"
-            st.rerun()
-            
         st.markdown("""
         <style>
         .stRadio label p { font-size: 22px !important; margin-left: 10px; line-height: 1.5; color: var(--text-color) !important; }
@@ -410,17 +408,22 @@ if "exam" in st.query_params:
                     clearInterval(timerId); 
                     elem.innerHTML = "00:00"; 
                     elem.style.color = "red";
+                    let targetWin = window.parent || window;
                     
-                    // Restored Direct Parent Location Refresh Trigger on Timer Expiration
-                    try {{
-                        let currentHref = window.parent.location.href;
-                        if (!currentHref.includes("exam=")) {{
-                            currentHref = window.location.href;
+                    // SILENT AUTO SUBMIT TRIGGER
+                    const buttons = Array.from(targetWin.document.querySelectorAll('button'));
+                    const autoSubmitBtn = buttons.find(btn => btn.innerText.includes('AUTO_SUBMIT_HIDDEN'));
+                    
+                    if (autoSubmitBtn) {{
+                        autoSubmitBtn.click();
+                    }} else {{
+                        try {{
+                            const url = new URL(targetWin.location.href);
+                            url.searchParams.set("autosubmit", "1");
+                            targetWin.location.href = url.href;
+                        }} catch(e) {{
+                            targetWin.location.search = "?autosubmit=1";
                         }}
-                        let separator = currentHref.includes("?") ? "&" : "?";
-                        window.parent.location.href = currentHref + separator + "autosubmit=1";
-                    }} catch(err) {{
-                        window.location.href = window.location.href + (window.location.href.includes("?") ? "&" : "?") + "autosubmit=1";
                     }}
                 }} else {{
                     var h = Math.floor(timeLeft / 3600);
@@ -528,76 +531,109 @@ if "exam" in st.query_params:
                             st.session_state.current_q = q_index
                             st.rerun()
 
+        # --- HIDDEN AUTO-SUBMIT TRIGGER ---
+        if st.button("AUTO_SUBMIT_HIDDEN", key="auto_submit_hidden"):
+            st.session_state.exam_state = "submitted"
+            st.rerun()
+
+        # Injecting JS to completely hide the auto submit button container visually from students
+        components.html(
+            """
+            <script>
+            let targetWin = window.parent || window;
+            let buttons = Array.from(targetWin.document.querySelectorAll('button'));
+            let autoSubmitBtn = buttons.find(btn => btn.innerText.includes('AUTO_SUBMIT_HIDDEN'));
+            if (autoSubmitBtn) {
+                let container = autoSubmitBtn.closest('div[data-testid="stButton"]');
+                if (container) { container.style.display = 'none'; }
+                else { autoSubmitBtn.style.display = 'none'; }
+            }
+            </script>
+            """, height=0, width=0
+        )
+
     elif st.session_state.exam_state == "submitted":
+        # Disarm active security tracking once submitted
         components.html('<script>try { sessionStorage.setItem("exam_active", "false"); } catch(e){}</script>', height=0, width=0)
         
-        st.success("🎉 Exam Submitted Successfully!")
-        with st.spinner("Calculating your score and saving results..."):
-            auto_score = 0
-            detailed_responses = {}
-            try:
-                points = int(exam_info.get("Points_Per_Question", 2))
-            except Exception:
-                points = 2
+        # Fallback check to prevent unhandled KeyError if someone bypasses the UI workflow
+        if "student_info" not in st.session_state:
+            st.error("Session information was lost during submission. Please contact your examiner.")
+            st.stop()
             
-            for i, q in enumerate(st.session_state.exam_qs):
-                student_ans = str(st.session_state.student_answers.get(i, "")).strip()
-                is_correct = False
-                q_type = str(q.get("Question_Type", "")).lower()
-                correct_ans = str(q.get("Correct_Answer", "")).strip()
+        st.success("🎉 Exam Submitted Successfully!")
+        
+        # Prevent database duplicated submissions on accidental page refresh
+        if not st.session_state.get("results_saved", False):
+            with st.spinner("Calculating your score and saving results..."):
+                auto_score = 0
+                detailed_responses = {}
+                try:
+                    points = int(exam_info.get("Points_Per_Question", 2))
+                except Exception:
+                    points = 2
                 
-                if "multiple choice" in q_type or "objective" in q_type:
-                    db_correct_ans = correct_ans.lower()
-                    clean_student_text = student_ans.lower()
-                    student_letter = ""
+                for i, q in enumerate(st.session_state.exam_qs):
+                    student_ans = str(st.session_state.student_answers.get(i, "")).strip()
+                    is_correct = False
+                    q_type = str(q.get("Question_Type", "")).lower()
+                    correct_ans = str(q.get("Correct_Answer", "")).strip()
                     
-                    if ")" in student_ans:
-                        parts = student_ans.split(")", 1)
-                        student_letter = parts[0].strip().lower()
-                        clean_student_text = parts[1].strip().lower()
+                    if "multiple choice" in q_type or "objective" in q_type:
+                        db_correct_ans = correct_ans.lower()
+                        clean_student_text = student_ans.lower()
+                        student_letter = ""
                         
-                    clean_db_text = db_correct_ans
-                    if ")" in db_correct_ans:
-                        clean_db_text = db_correct_ans.split(")", 1)[1].strip().lower()
-                        
-                    if clean_student_text != "":
-                        if (clean_student_text == clean_db_text) or (student_letter == db_correct_ans) or (student_ans.lower() == db_correct_ans):
-                            auto_score += points
-                            is_correct = True
-                        
-                detailed_responses[f"Q{i+1}"] = {
-                    "Question": q.get("Question_Text", ""),
-                    "Type": q.get("Question_Type", ""),
-                    "Student_Answer": student_ans,
-                    "Is_Correct": is_correct,
-                    "Correct_Answer": correct_ans 
+                        if ")" in student_ans:
+                            parts = student_ans.split(")", 1)
+                            student_letter = parts[0].strip().lower()
+                            clean_student_text = parts[1].strip().lower()
+                            
+                        clean_db_text = db_correct_ans
+                        if ")" in db_correct_ans:
+                            clean_db_text = db_correct_ans.split(")", 1)[1].strip().lower()
+                            
+                        if clean_student_text != "":
+                            if (clean_student_text == clean_db_text) or (student_letter == db_correct_ans) or (student_ans.lower() == db_correct_ans):
+                                auto_score += points
+                                is_correct = True
+                            
+                    detailed_responses[f"Q{i+1}"] = {
+                        "Question": q.get("Question_Text", ""),
+                        "Type": q.get("Question_Type", ""),
+                        "Student_Answer": student_ans,
+                        "Is_Correct": is_correct,
+                        "Correct_Answer": correct_ans 
+                    }
+                    
+                result_data = {
+                    "Exam_ID": [exam_info["Exam_ID"]],
+                    "Student_Name": [st.session_state.student_info["name"]],
+                    "Class": [st.session_state.student_info["class"]],
+                    "Contact": [st.session_state.student_info.get("contact", "")],
+                    "Auto_Score": [auto_score],
+                    "Manual_Score": [0],
+                    "Total_Score": [auto_score],
+                    "Detailed_Responses": [str(detailed_responses)]
                 }
                 
-            result_data = {
-                "Exam_ID": [exam_info["Exam_ID"]],
-                "Student_Name": [st.session_state.student_info["name"]],
-                "Class": [st.session_state.student_info["class"]],
-                "Contact": [st.session_state.student_info.get("contact", "")],
-                "Auto_Score": [auto_score],
-                "Manual_Score": [0],
-                "Total_Score": [auto_score],
-                "Detailed_Responses": [str(detailed_responses)]
-            }
-            
-            try:
-                df_results = conn.read(worksheet="Student_Results", ttl="0m") 
-                df_new_result = pd.DataFrame(result_data)
-                
-                if df_results.empty:
-                    df_updated = df_new_result
-                else:
-                    df_updated = pd.concat([df_results, df_new_result], ignore_index=True)
+                try:
+                    df_results = conn.read(worksheet="Student_Results", ttl="0m") 
+                    df_new_result = pd.DataFrame(result_data)
                     
-                conn.update(worksheet="Student_Results", data=df_updated)
-                st.info("✅ Your answers have been securely recorded. You may safely close this window.")
-                st.balloons()
-            except Exception as e:
-                st.error(f"⚠️ Error saving results: {e}") 
+                    if df_results.empty:
+                        df_updated = df_new_result
+                    else:
+                        df_updated = pd.concat([df_results, df_new_result], ignore_index=True)
+                        
+                    conn.update(worksheet="Student_Results", data=df_updated)
+                    st.session_state.results_saved = True # Set the lock to block duplicate writes
+                    st.info("✅ Your answers have been securely recorded. You may safely close this window.")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"⚠️ Error saving results: {e}") 
+        else:
+            st.info("✅ Your answers have already been securely recorded. You may safely close this window.")
   
     elif st.session_state.exam_state == "examiner_dashboard":
         st.markdown("<h2 style='text-align: center;'>👨‍🏫 Examiner Dashboard</h2>", unsafe_allow_html=True)
@@ -754,6 +790,7 @@ try:
 except Exception as e:
     df_quiz = pd.DataFrame(columns=["Class", "Subject", "Topic", "Type", "Question", "Image", "Options", "Correct Answer"])
 
+# Ensure all columns exist (including Class and Image)
 for col in ["Class", "Subject", "Topic", "Type", "Question", "Image", "Options", "Correct Answer"]:
     if col not in df_quiz.columns:
         df_quiz[col] = None
@@ -785,6 +822,7 @@ def save_subjects():
     except Exception as e:
         st.error(f"Failed to save subjects to Google Sheets: {e}")
 
+# Load Classes (Optimistic Sync Logic)
 DEFAULT_CLASSES = ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"]
 loaded_classes = []
 
