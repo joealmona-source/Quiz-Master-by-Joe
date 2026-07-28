@@ -107,38 +107,82 @@ def inject_exam_security():
     components.html(
         """
         <script>
-        // Disable Right-Click context menu
-        document.addEventListener('contextmenu', e => e.preventDefault());
-
-        // Disable standard copy shortcuts
-        document.addEventListener('keydown', e => {
-            if (e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {
-                e.preventDefault();
-            }
-        });
-
-        // 3-Strikes Tab Switch / Minimizing Detection (Attached ONCE to window.parent)
-        if (!window.parent.__examSecurityListenerAttached) {
-            window.parent.__examSecurityListenerAttached = true;
-
-            window.parent.document.addEventListener("visibilitychange", function() {
-                if (window.parent.document.hidden) {
-                    let strikes = parseInt(sessionStorage.getItem("exam_strikes") || "0") + 1;
-                    sessionStorage.setItem("exam_strikes", strikes);
-
-                    if (strikes <= 3) {
-                        alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\n\nYou left or minimized the exam tab. Navigating away 4 times will automatically trigger exam submission!`);
-                    } else {
-                        alert("❌ VIOLATION LIMIT EXCEEDED!\n\nYou have left the exam tab 4 times. Your exam is now automatically submitting.");
-                        
-                        // Direct auto-submit bypassing modal dialogs
-                        const url = new URL(window.parent.location.href);
-                        url.searchParams.set("autosubmit", "1");
-                        window.parent.location.href = url.href;
-                    }
+        (function() {
+            // Context menu & keyboard shortcut restrictions
+            document.addEventListener('contextmenu', e => e.preventDefault());
+            document.addEventListener('keydown', e => {
+                if (e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {
+                    e.preventDefault();
                 }
             });
-        }
+
+            // Cross-origin safe target resolution
+            let targetWindow = window;
+            let targetDoc = document;
+            try {
+                if (window.top && window.top.document) {
+                    targetWindow = window.top;
+                    targetDoc = window.top.document;
+                }
+            } catch (e) {
+                targetWindow = window;
+                targetDoc = document;
+            }
+
+            if (targetWindow.__examSecurityInitialized) return;
+            targetWindow.__examSecurityInitialized = true;
+
+            function getStrikes() {
+                try {
+                    return parseInt(sessionStorage.getItem("exam_strikes") || "0");
+                } catch(e) {
+                    return 0;
+                }
+            }
+
+            function setStrikes(val) {
+                try {
+                    sessionStorage.setItem("exam_strikes", val.toString());
+                } catch(e) {}
+            }
+
+            let lastViolationTime = 0;
+
+            function handleViolation(reason) {
+                let now = Date.now();
+                // 1.5s cooldown debounce to avoid double counting blur + visibilitychange
+                if (now - lastViolationTime < 1500) return;
+                lastViolationTime = now;
+
+                let strikes = getStrikes() + 1;
+                setStrikes(strikes);
+
+                if (strikes <= 3) {
+                    alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\n\nYou ${reason}. Leaving or minimizing the exam window 4 times will automatically submit your exam!`);
+                } else {
+                    alert("❌ VIOLATION LIMIT EXCEEDED!\n\nYou have left or minimized the exam tab 4 times. Your exam is now automatically submitting.");
+                    try {
+                        const url = new URL(targetWindow.location.href);
+                        url.searchParams.set("autosubmit", "1");
+                        targetWindow.location.href = url.href;
+                    } catch(e) {
+                        window.location.search = "?autosubmit=1";
+                    }
+                }
+            }
+
+            // 1. Tab-switch detection
+            targetDoc.addEventListener("visibilitychange", function() {
+                if (targetDoc.hidden) {
+                    handleViolation("switched tabs or minimized the browser");
+                }
+            });
+
+            // 2. Window minimize / focus-loss detection
+            targetWindow.addEventListener("blur", function() {
+                handleViolation("left or minimized the exam window");
+            });
+        })();
         </script>
         """,
         height=0,
@@ -210,14 +254,14 @@ if "exam" in st.query_params:
         st.session_state.exam_state = "landing"
         
     if st.session_state.exam_state == "landing":
-        # Reset strike counts and security listener state on landing page
+        # Reset strike counts and security state for fresh candidate session
         components.html(
             """
             <script>
-            sessionStorage.removeItem("exam_strikes");
-            if (window.parent.__examSecurityListenerAttached) {
-                window.parent.__examSecurityListenerAttached = false;
-            }
+            try {
+                sessionStorage.removeItem("exam_strikes");
+                if (window.top) window.top.__examSecurityInitialized = false;
+            } catch(e) {}
             </script>
             """,
             height=0,
@@ -993,7 +1037,6 @@ elif choice == "View Quiz Bank":
         st.subheader(f"📚 Active Database Records ({len(filtered)})")
         filtered.insert(0, "Delete", False)
         
-        # Configure image column to show thumbnail representations natively in dataframe
         col_config = {
             "Image": st.column_config.ImageColumn("Image Thumbnail", help="Thumbnail of uploaded image")
         }
