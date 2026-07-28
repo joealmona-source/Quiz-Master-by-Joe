@@ -3,3 +3,4 @@ pandas
 groq
 st-gsheets-connection
 Pillow
+reportlab
