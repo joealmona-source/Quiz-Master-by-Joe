@@ -174,7 +174,7 @@ def inject_exam_security():
                         }}
                         let separator = currentHref.includes("?") ? "&" : "?";
                         window.parent.location.href = currentHref + separator + "autosubmit=1";
-                    } catch(err) {{
+                    catch(err) {{
                         window.location.href = window.location.href + (window.location.href.includes("?") ? "&" : "?") + "autosubmit=1";
                     }}
                 }}
