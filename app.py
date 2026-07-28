@@ -108,29 +108,32 @@ def inject_exam_security():
         """
         <script>
         (function() {
-            // Context menu & keyboard shortcut restrictions
-            document.addEventListener('contextmenu', e => e.preventDefault());
-            document.addEventListener('keydown', e => {
-                if (e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {
-                    e.preventDefault();
-                }
-            });
-
-            // Cross-origin safe target resolution
-            let targetWindow = window;
+            // Target window.parent (the Streamlit app), bypassing window.top to avoid strict CORS block
+            let targetWin = window;
             let targetDoc = document;
             try {
-                if (window.top && window.top.document) {
-                    targetWindow = window.top;
-                    targetDoc = window.top.document;
+                if (window.parent && window.parent.document) {
+                    targetWin = window.parent;
+                    targetDoc = window.parent.document;
                 }
             } catch (e) {
-                targetWindow = window;
-                targetDoc = document;
+                console.warn("Could not access parent window:", e);
             }
 
-            if (targetWindow.__examSecurityInitialized) return;
-            targetWindow.__examSecurityInitialized = true;
+            // Flag exam as active in this session
+            try {
+                sessionStorage.setItem("exam_active", "true");
+            } catch(e) {}
+
+            // Ensure listeners are only attached ONCE per browser load
+            if (targetWin.__examSecurityInitialized) return;
+            targetWin.__examSecurityInitialized = true;
+
+            function isActive() {
+                try {
+                    return sessionStorage.getItem("exam_active") === "true";
+                } catch(e) { return false; }
+            }
 
             function getStrikes() {
                 try {
@@ -149,6 +152,8 @@ def inject_exam_security():
             let lastViolationTime = 0;
 
             function handleViolation(reason) {
+                if (!isActive()) return; // Don't log strikes on the landing or success pages
+                
                 let now = Date.now();
                 // 1.5s cooldown debounce to avoid double counting blur + visibilitychange
                 if (now - lastViolationTime < 1500) return;
@@ -158,29 +163,39 @@ def inject_exam_security():
                 setStrikes(strikes);
 
                 if (strikes <= 3) {
-                    alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\n\nYou ${reason}. Leaving or minimizing the exam window 4 times will automatically submit your exam!`);
+                    alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\\n\\nYou ${reason}. Leaving or minimizing the exam window 4 times will automatically submit your exam!`);
                 } else {
-                    alert("❌ VIOLATION LIMIT EXCEEDED!\n\nYou have left or minimized the exam tab 4 times. Your exam is now automatically submitting.");
+                    alert("❌ VIOLATION LIMIT EXCEEDED!\\n\\nYou have left or minimized the exam tab 4 times. Your exam is now automatically submitting.");
                     try {
-                        const url = new URL(targetWindow.location.href);
+                        const url = new URL(targetWin.location.href);
                         url.searchParams.set("autosubmit", "1");
-                        targetWindow.location.href = url.href;
+                        targetWin.location.href = url.href;
                     } catch(e) {
-                        window.location.search = "?autosubmit=1";
+                        targetWin.location.search = targetWin.location.search + (targetWin.location.search.includes('?') ? '&' : '?') + "autosubmit=1";
                     }
                 }
             }
 
             // 1. Tab-switch detection
             targetDoc.addEventListener("visibilitychange", function() {
-                if (targetDoc.hidden) {
+                if (targetDoc.hidden || targetDoc.visibilityState === "hidden") {
                     handleViolation("switched tabs or minimized the browser");
                 }
             });
 
             // 2. Window minimize / focus-loss detection
-            targetWindow.addEventListener("blur", function() {
+            targetWin.addEventListener("blur", function() {
                 handleViolation("left or minimized the exam window");
+            });
+
+            // Prevent shortcuts and context menu only when exam is active
+            targetDoc.addEventListener('contextmenu', e => {
+                if(isActive()) e.preventDefault();
+            });
+            targetDoc.addEventListener('keydown', e => {
+                if (isActive() && e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {
+                    e.preventDefault();
+                }
             });
         })();
         </script>
@@ -254,13 +269,13 @@ if "exam" in st.query_params:
         st.session_state.exam_state = "landing"
         
     if st.session_state.exam_state == "landing":
-        # Reset strike counts and security state for fresh candidate session
+        # Reset strike counts and deactivate security on landing page
         components.html(
             """
             <script>
             try {
                 sessionStorage.removeItem("exam_strikes");
-                if (window.top) window.top.__examSecurityInitialized = false;
+                sessionStorage.setItem("exam_active", "false");
             } catch(e) {}
             </script>
             """,
@@ -385,9 +400,14 @@ if "exam" in st.query_params:
                     clearInterval(timerId); 
                     elem.innerHTML = "00:00"; 
                     elem.style.color = "red";
-                    const url = new URL(window.parent.location.href);
-                    url.searchParams.set("autosubmit", "1");
-                    window.parent.location.href = url.href;
+                    let targetWin = window.parent || window;
+                    try {{
+                        const url = new URL(targetWin.location.href);
+                        url.searchParams.set("autosubmit", "1");
+                        targetWin.location.href = url.href;
+                    }} catch(e) {{
+                        targetWin.location.search = "?autosubmit=1";
+                    }}
                 }} else {{
                     var h = Math.floor(timeLeft / 3600);
                     var m = Math.floor((timeLeft % 3600) / 60);
@@ -415,8 +435,9 @@ if "exam" in st.query_params:
                 if st.button("Quit ❌", use_container_width=True):
                     confirm_quit_modal()
 
-        with st.expander("🧮 Open Scientific Calculator", expanded=False):
-            st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
+        if exam_info.get("Allow_Calculator") == True:
+            with st.expander("🧮 Open Scientific Calculator", expanded=False):
+                st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
 
         st.markdown("---")
         
@@ -494,6 +515,9 @@ if "exam" in st.query_params:
                             st.rerun()
 
     elif st.session_state.exam_state == "submitted":
+        # Disarm active security tracking once submitted
+        components.html('<script>try { sessionStorage.setItem("exam_active", "false"); } catch(e){}</script>', height=0, width=0)
+        
         st.success("🎉 Exam Submitted Successfully!")
         with st.spinner("Calculating your score and saving results..."):
             auto_score = 0
