@@ -117,35 +117,28 @@ def inject_exam_security():
             }
         });
 
-        // 3-Strikes Tab Switch / Minimizing Detection
-        let strikes = parseInt(sessionStorage.getItem("exam_strikes") || "0");
+        // 3-Strikes Tab Switch / Minimizing Detection (Attached ONCE to window.parent)
+        if (!window.parent.__examSecurityListenerAttached) {
+            window.parent.__examSecurityListenerAttached = true;
 
-        document.addEventListener("visibilitychange", function() {
-            if (document.hidden) {
-                strikes += 1;
-                sessionStorage.setItem("exam_strikes", strikes);
+            window.parent.document.addEventListener("visibilitychange", function() {
+                if (window.parent.document.hidden) {
+                    let strikes = parseInt(sessionStorage.getItem("exam_strikes") || "0") + 1;
+                    sessionStorage.setItem("exam_strikes", strikes);
 
-                if (strikes <= 3) {
-                    alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\\n\\nYou left or minimized the exam tab. Navigating away 4 times will automatically trigger exam submission!`);
-                } else {
-                    alert("❌ VIOLATION LIMIT EXCEEDED!\\n\\nYou have left the exam tab 4 times. Your exam is now automatically submitting.");
-                    
-                    // Auto-click the submit button and its modal confirmation
-                    var btns = window.parent.document.querySelectorAll('button');
-                    for(var i=0; i<btns.length; i++) {
-                        if(btns[i].innerText.includes('Submit 🏁')) { 
-                            btns[i].click(); 
-                            setTimeout(function() {
-                                var mBtns = window.parent.document.querySelectorAll('button');
-                                for(var j=0; j<mBtns.length; j++) {
-                                    if(mBtns[j].innerText.includes('Yes, Submit')) { mBtns[j].click(); }
-                                }
-                            }, 500);
-                        }
+                    if (strikes <= 3) {
+                        alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\n\nYou left or minimized the exam tab. Navigating away 4 times will automatically trigger exam submission!`);
+                    } else {
+                        alert("❌ VIOLATION LIMIT EXCEEDED!\n\nYou have left the exam tab 4 times. Your exam is now automatically submitting.");
+                        
+                        // Direct auto-submit bypassing modal dialogs
+                        const url = new URL(window.parent.location.href);
+                        url.searchParams.set("autosubmit", "1");
+                        window.parent.location.href = url.href;
                     }
                 }
-            }
-        });
+            });
+        }
         </script>
         """,
         height=0,
@@ -189,6 +182,10 @@ def process_image_for_db(uploaded_file):
 if "exam" in st.query_params:
     exam_id_param = st.query_params["exam"]
     
+    # Auto-submit trigger check (from tab security or timer expiration)
+    if st.query_params.get("autosubmit") == "1":
+        st.session_state.exam_state = "submitted"
+
     try:
         df_active = conn.read(worksheet="Active_Exams", ttl="10m")
         exam_data = df_active[df_active["Exam_ID"] == exam_id_param]
@@ -213,6 +210,20 @@ if "exam" in st.query_params:
         st.session_state.exam_state = "landing"
         
     if st.session_state.exam_state == "landing":
+        # Reset strike counts and security listener state on landing page
+        components.html(
+            """
+            <script>
+            sessionStorage.removeItem("exam_strikes");
+            if (window.parent.__examSecurityListenerAttached) {
+                window.parent.__examSecurityListenerAttached = false;
+            }
+            </script>
+            """,
+            height=0,
+            width=0
+        )
+
         st.write("---")
         st.markdown(f"<div style='text-align: center; font-style: italic; font-size: 1.1rem; color: #475569;'><b>Instructions:</b><br>{exam_info['Instructions']}</div>", unsafe_allow_html=True)
         st.write("---")
@@ -330,18 +341,9 @@ if "exam" in st.query_params:
                     clearInterval(timerId); 
                     elem.innerHTML = "00:00"; 
                     elem.style.color = "red";
-                    var btns = window.parent.document.querySelectorAll('button');
-                    for(var i=0; i<btns.length; i++) {{
-                        if(btns[i].innerText.includes('Submit 🏁')) {{ 
-                            btns[i].click(); 
-                            setTimeout(function() {{
-                                var mBtns = window.parent.document.querySelectorAll('button');
-                                for(var j=0; j<mBtns.length; j++) {{
-                                    if(mBtns[j].innerText.includes('Yes, Submit')) {{ mBtns[j].click(); }}
-                                }}
-                            }}, 500);
-                        }}
-                    }}
+                    const url = new URL(window.parent.location.href);
+                    url.searchParams.set("autosubmit", "1");
+                    window.parent.location.href = url.href;
                 }} else {{
                     var h = Math.floor(timeLeft / 3600);
                     var m = Math.floor((timeLeft % 3600) / 60);
