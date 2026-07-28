@@ -16,7 +16,6 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="School Quiz Champion Pro", layout="wide", initial_sidebar_state="expanded")
 
 # --- SYSTEM INITIALIZATION & SESSION STATE ---
-
 if "live_questions" not in st.session_state:
     st.session_state.live_questions = []
 
@@ -53,6 +52,107 @@ st.markdown("""
 # --- GOOGLE SHEETS CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# ==============================================================================
+# SECURITY & CONFIRMATION MODALS
+# ==============================================================================
+@st.dialog("⚠️ Confirm Submission")
+def confirm_submit_modal():
+    st.write("Are you sure you want to submit your exam now?")
+    st.caption("Once submitted, you will not be able to modify your answers.")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Yes, Submit", type="primary", use_container_width=True):
+            st.session_state.exam_state = "submitted"
+            st.rerun()
+    with col2:
+        if st.button("Cancel", use_container_width=True):
+            st.rerun()
+
+@st.dialog("🚪 Confirm Exit")
+def confirm_quit_modal():
+    st.write("Are you sure you want to quit the exam?")
+    st.caption("Your session will end and unsubmitted answers may be lost.")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Yes, Quit", type="primary", use_container_width=True):
+            for k in ["exam_state", "exam_qs", "student_answers", "current_q", "exam_end_timestamp_ms", "student_info"]:
+                st.session_state.pop(k, None)
+            st.rerun()
+    with col2:
+        if st.button("Cancel", use_container_width=True):
+            st.rerun()
+
+def inject_exam_security():
+    st.markdown(
+        """
+        <style>
+        /* Disable text highlight/selection */
+        * {
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            user-select: none !important;
+        }
+        /* Conceal content if user tries to print/save page */
+        @media print {
+            html, body {
+                display: none !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    components.html(
+        """
+        <script>
+        // Disable Right-Click context menu
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Disable standard copy shortcuts
+        document.addEventListener('keydown', e => {
+            if (e.ctrlKey && (e.key === 'c' || e.key === 'u' || e.key === 's' || e.key === 'p')) {
+                e.preventDefault();
+            }
+        });
+
+        // 3-Strikes Tab Switch / Minimizing Detection
+        let strikes = parseInt(sessionStorage.getItem("exam_strikes") || "0");
+
+        document.addEventListener("visibilitychange", function() {
+            if (document.hidden) {
+                strikes += 1;
+                sessionStorage.setItem("exam_strikes", strikes);
+
+                if (strikes <= 3) {
+                    alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\\n\\nYou left or minimized the exam tab. Navigating away 4 times will automatically trigger exam submission!`);
+                } else {
+                    alert("❌ VIOLATION LIMIT EXCEEDED!\\n\\nYou have left the exam tab 4 times. Your exam is now automatically submitting.");
+                    
+                    // Auto-click the submit button and its modal confirmation
+                    var btns = window.parent.document.querySelectorAll('button');
+                    for(var i=0; i<btns.length; i++) {
+                        if(btns[i].innerText.includes('Submit 🏁')) { 
+                            btns[i].click(); 
+                            setTimeout(function() {
+                                var mBtns = window.parent.document.querySelectorAll('button');
+                                for(var j=0; j<mBtns.length; j++) {
+                                    if(mBtns[j].innerText.includes('Yes, Submit')) { mBtns[j].click(); }
+                                }
+                            }, 500);
+                        }
+                    }
+                }
+            }
+        });
+        </script>
+        """,
+        height=0,
+        width=0
+    )
+
+
 # --- IMAGE COMPRESSION UTILITY ---
 def process_image_for_db(uploaded_file):
     if uploaded_file is None:
@@ -60,7 +160,6 @@ def process_image_for_db(uploaded_file):
     
     file_bytes = uploaded_file.read()
     
-    # Strict 100KB limit check
     if len(file_bytes) > 100 * 1024:
         st.error("⚠️ File exceeds the 100KB limit. Please upload a smaller image.")
         st.stop()
@@ -70,14 +169,12 @@ def process_image_for_db(uploaded_file):
         if img.mode != 'RGB':
             img = img.convert('RGB')
             
-        # Scale automatically to fit standard multiple choice image size constraints
         img.thumbnail((600, 600)) 
         
         buffered = BytesIO()
         img.save(buffered, format="JPEG", quality=70)
         b64_string = base64.b64encode(buffered.getvalue()).decode()
         
-        # Google Sheets cell limit safeguard (50,000 chars)
         if len(b64_string) > 48000:
             buffered = BytesIO()
             img.save(buffered, format="JPEG", quality=40)
@@ -181,6 +278,21 @@ if "exam" in st.query_params:
         </style>
         """, unsafe_allow_html=True)
         
+        # --- INJECT SECURITY HANDLERS ---
+        inject_exam_security()
+        
+        st.warning(
+            """
+            **🔒 STRICT EXAM SECURITY RULES & WARNING:**
+            * **No Copying or Text Selection:** Copying question text or using inspect tools is strictly disabled.
+            * **No Screenshots or Screen Recording:** Capturing exam content is monitored and prohibited.
+            * **Tab Switching / Window Minimizing:** You are **NOT** allowed to switch tabs or minimize this browser window. 
+              * **3-Strike Policy:** You are allowed a maximum of **3 warnings**.
+              * **Automatic Submission:** On your **4th attempt/violation**, your exam will be **automatically submitted** immediately without notice.
+            """,
+            icon="⚠️"
+        )
+        
         if "exam_qs" not in st.session_state:
             df_eq = conn.read(worksheet="Exam_Questions", ttl="10m")
             q_list = df_eq[df_eq["Exam_ID"] == exam_info["Exam_ID"]].to_dict('records')
@@ -220,7 +332,15 @@ if "exam" in st.query_params:
                     elem.style.color = "red";
                     var btns = window.parent.document.querySelectorAll('button');
                     for(var i=0; i<btns.length; i++) {{
-                        if(btns[i].innerText.includes('Submit')) {{ btns[i].click(); }}
+                        if(btns[i].innerText.includes('Submit 🏁')) {{ 
+                            btns[i].click(); 
+                            setTimeout(function() {{
+                                var mBtns = window.parent.document.querySelectorAll('button');
+                                for(var j=0; j<mBtns.length; j++) {{
+                                    if(mBtns[j].innerText.includes('Yes, Submit')) {{ mBtns[j].click(); }}
+                                }}
+                            }}, 500);
+                        }}
                     }}
                 }} else {{
                     var h = Math.floor(timeLeft / 3600);
@@ -244,20 +364,16 @@ if "exam" in st.query_params:
             b_col1, b_col2 = st.columns(2)
             with b_col1:
                 if st.button("Submit 🏁", type="primary", use_container_width=True):
-                    st.session_state.exam_state = "submitted"
-                    st.rerun()
+                    confirm_submit_modal()
             with b_col2:
                 if st.button("Quit ❌", use_container_width=True):
-                    for k in ["exam_state", "exam_qs", "student_answers", "current_q", "exam_end_timestamp_ms", "student_info"]:
-                        st.session_state.pop(k, None)
-                    st.rerun()
+                    confirm_quit_modal()
 
         with st.expander("🧮 Open Scientific Calculator", expanded=False):
             st.components.v1.html("""<iframe width="100%" height="350px" style="border: none;" src="https://www.desmos.com/scientific"></iframe>""", height=360)
 
         st.markdown("---")
         
-        # Rendering Image if present before the question text
         img_data = current_q_data.get('Image', '')
         if pd.notna(img_data) and str(img_data).startswith('data:image'):
             st.image(img_data, use_container_width=False, width=600)
@@ -637,7 +753,6 @@ if choice == "Class Settings":
         if st.button("Add Class") and new_class:
             clean_class = new_class.strip()
             if clean_class not in st.session_state.classes:
-                # OPTIMISTIC UPDATE
                 st.session_state.classes.append(clean_class)
                 save_classes()
                 st.success(f"'{clean_class}' added successfully!")
@@ -1073,7 +1188,6 @@ elif choice == "Live Competition Mode":
                     """
                     components.html(timer_html, height=45)
                 
-                # Big rendering of Image before the text
                 img_data = current_q.get('Image', '')
                 if pd.notna(img_data) and str(img_data).startswith('data:image'):
                     st.image(img_data, use_container_width=False, width=800)
