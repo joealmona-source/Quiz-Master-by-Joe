@@ -166,20 +166,16 @@ def inject_exam_security():
                 }} else {{
                     alert("❌ VIOLATION LIMIT EXCEEDED!\\n\\nYou have left or minimized the exam tab 4 times. Your exam is now automatically submitting.");
                     
-                    // FIX: Secure Cross-Origin Parent Navigation
-                    let targetUrl = "";
+                    // Restored Direct Parent Location Refresh Trigger
                     try {{
-                        if (document.referrer) {{
-                            let rUrl = new URL(document.referrer);
-                            rUrl.searchParams.set("exam", "{exam_id}");
-                            rUrl.searchParams.set("autosubmit", "1");
-                            targetUrl = rUrl.href;
-                        }} else {{
-                            targetUrl = "https://quiz-master-by-joe-v8hv3x7blqf35lgjpge6br.streamlit.app/?exam={exam_id}&autosubmit=1";
+                        let currentHref = window.parent.location.href;
+                        if (!currentHref.includes("exam=")) {{
+                            currentHref = window.location.href;
                         }}
-                        window.open(targetUrl, '_top');
-                    }} catch(err) {{
-                        console.error("Autosubmit failed:", err);
+                        let separator = currentHref.includes("?") ? "&" : "?";
+                        window.parent.location.href = currentHref + separator + "autosubmit=1";
+                    } catch(err) {{
+                        window.location.href = window.location.href + (window.location.href.includes("?") ? "&" : "?") + "autosubmit=1";
                     }}
                 }}
             }}
@@ -362,7 +358,6 @@ if "exam" in st.query_params:
     elif st.session_state.exam_state == "in_progress":
         
         # --- PYTHON SAFETY NET TIMER CHECK ---
-        # Forces immediate submission if user interacts with page after time expires natively
         if "exam_end_timestamp_ms" in st.session_state and int(time.time() * 1000) >= st.session_state.exam_end_timestamp_ms:
             st.session_state.exam_state = "submitted"
             st.rerun()
@@ -416,20 +411,16 @@ if "exam" in st.query_params:
                     elem.innerHTML = "00:00"; 
                     elem.style.color = "red";
                     
-                    // FIX: Secure Cross-Origin Parent Navigation
-                    var targetUrl = "";
+                    // Restored Direct Parent Location Refresh Trigger on Timer Expiration
                     try {{
-                        if (document.referrer) {{
-                            var rUrl = new URL(document.referrer);
-                            rUrl.searchParams.set("exam", "{exam_info['Exam_ID']}");
-                            rUrl.searchParams.set("autosubmit", "1");
-                            targetUrl = rUrl.href;
-                        }} else {{
-                            targetUrl = "https://quiz-master-by-joe-v8hv3x7blqf35lgjpge6br.streamlit.app/?exam={exam_info['Exam_ID']}&autosubmit=1";
+                        let currentHref = window.parent.location.href;
+                        if (!currentHref.includes("exam=")) {{
+                            currentHref = window.location.href;
                         }}
-                        window.open(targetUrl, '_top');
+                        let separator = currentHref.includes("?") ? "&" : "?";
+                        window.parent.location.href = currentHref + separator + "autosubmit=1";
                     }} catch(err) {{
-                        console.error("Autosubmit failed:", err);
+                        window.location.href = window.location.href + (window.location.href.includes("?") ? "&" : "?") + "autosubmit=1";
                     }}
                 }} else {{
                     var h = Math.floor(timeLeft / 3600);
@@ -538,7 +529,6 @@ if "exam" in st.query_params:
                             st.rerun()
 
     elif st.session_state.exam_state == "submitted":
-        # Disarm active security tracking once submitted
         components.html('<script>try { sessionStorage.setItem("exam_active", "false"); } catch(e){}</script>', height=0, width=0)
         
         st.success("🎉 Exam Submitted Successfully!")
@@ -764,7 +754,6 @@ try:
 except Exception as e:
     df_quiz = pd.DataFrame(columns=["Class", "Subject", "Topic", "Type", "Question", "Image", "Options", "Correct Answer"])
 
-# Ensure all columns exist (including Class and Image)
 for col in ["Class", "Subject", "Topic", "Type", "Question", "Image", "Options", "Correct Answer"]:
     if col not in df_quiz.columns:
         df_quiz[col] = None
@@ -796,7 +785,6 @@ def save_subjects():
     except Exception as e:
         st.error(f"Failed to save subjects to Google Sheets: {e}")
 
-# Load Classes (Optimistic Sync Logic)
 DEFAULT_CLASSES = ["JSS 1", "JSS 2", "JSS 3", "SSS 1", "SSS 2", "SSS 3"]
 loaded_classes = []
 
