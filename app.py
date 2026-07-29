@@ -190,21 +190,28 @@ def inject_exam_security():
                 } catch(e) {}
             }
 
-            let lastViolationTime = 0;
-
             function handleViolation(reason) {
                 if (!isActive()) return; // Don't log strikes on the landing or success pages
                 
+                let lastStr = sessionStorage.getItem("exam_last_violation") || "0";
+                let lastViolationTime = parseInt(lastStr, 10);
                 let now = Date.now();
+                
                 // 1.5s cooldown debounce to avoid double counting blur + visibilitychange
                 if (now - lastViolationTime < 1500) return;
-                lastViolationTime = now;
+                
+                // Update time before alert triggers
+                sessionStorage.setItem("exam_last_violation", now.toString());
 
                 let strikes = getStrikes() + 1;
                 setStrikes(strikes);
 
                 if (strikes <= 3) {
                     alert(`⚠️ SECURITY WARNING (${strikes}/3 Attempts Used)\\n\\nYou ${reason}. Leaving or minimizing the exam window 4 times will automatically submit your exam!`);
+                    
+                    // CRITICAL FIX: Reset the timestamp AGAIN after the blocking alert closes.
+                    // This clears out any queued events that piled up while waiting for the user to click "Okay"
+                    sessionStorage.setItem("exam_last_violation", Date.now().toString());
                 } else {
                     // SILENT AUTO SUBMIT TRIGGER (No warning popup on the 4th strike)
                     const buttons = Array.from(targetWin.document.querySelectorAll('button'));
@@ -329,6 +336,7 @@ if "exam" in st.query_params:
             <script>
             try {
                 sessionStorage.removeItem("exam_strikes");
+                sessionStorage.removeItem("exam_last_violation");
                 sessionStorage.setItem("exam_active", "false");
             } catch(e) {}
             </script>
@@ -362,7 +370,8 @@ if "exam" in st.query_params:
             
             if st.button("🚀 Start Exam", type="primary", use_container_width=True):
                 try:
-                    df_results_check = conn.read(worksheet="Student_Results", ttl="10m")
+                    # FIX: ttl=0 bypasses cache to prevent multiple rapid registrations from clashing
+                    df_results_check = conn.read(worksheet="Student_Results", ttl=0)
                     exam_history = df_results_check[df_results_check["Exam_ID"] == exam_info["Exam_ID"]]
                     taken_names = [str(name).strip().lower() for name in exam_history["Student_Name"].dropna().tolist()]
                 except Exception:
@@ -664,7 +673,8 @@ if "exam" in st.query_params:
                 }
                 
                 try:
-                    df_results = conn.read(worksheet="Student_Results", ttl="10m") 
+                    # FIX: ttl=0 prevents pulling an outdated cache when multiple students submit concurrently
+                    df_results = conn.read(worksheet="Student_Results", ttl=0) 
                     df_new_result = pd.DataFrame(result_data)
                     
                     if df_results.empty:
@@ -673,6 +683,7 @@ if "exam" in st.query_params:
                         df_updated = pd.concat([df_results, df_new_result], ignore_index=True)
                         
                     conn.update(worksheet="Student_Results", data=df_updated)
+                    st.cache_data.clear() # Added extra layer of cache clearance just in case
                     st.session_state.results_saved = True # Set the lock to block duplicate writes
                     st.info("✅ Your answers have been securely recorded. You may safely close this window.")
                     st.balloons()
@@ -691,7 +702,8 @@ if "exam" in st.query_params:
                 
         st.write("---")
         try:
-            df_results = conn.read(worksheet="Student_Results", ttl="10m")
+            # FIX: ttl=0 forces the dashboard to pull real-time database inputs, displaying all live submissions 
+            df_results = conn.read(worksheet="Student_Results", ttl=0)
             exam_results = df_results[df_results["Exam_ID"] == exam_info["Exam_ID"]]
         except Exception as e:
             st.error("Could not fetch student results from the database.")
