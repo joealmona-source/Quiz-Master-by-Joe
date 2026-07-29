@@ -1038,6 +1038,8 @@ elif choice == "Exam Mode Setup":
                                 df_exam_questions = pd.concat([df_exam_questions, pd.DataFrame(final_exam_qs)], ignore_index=True)
                                 conn.update(worksheet="Exam_Questions", data=df_exam_questions)
                                 
+                                st.cache_data.clear()
+                                
                                 st.success("✅ Exam Successfully Created & Saved to Database!")
                                 base_url = "https://quiz-master-by-joe-v8hv3x7blqf35lgjpge6br.streamlit.app"
                                 st.info(f"**Share this link with students:**\n{base_url}/?exam={exam_id}")
