@@ -232,9 +232,14 @@ def inject_exam_security():
                 }
             });
 
-            // 2. Window minimize / focus-loss detection
+            // 2. Window minimize / focus-loss detection with IFRAME exception (e.g. Scientific Calculator)
             targetWin.addEventListener("blur", function() {
-                handleViolation("left or minimized the exam window");
+                setTimeout(function() {
+                    if (targetDoc.activeElement && (targetDoc.activeElement.tagName === "IFRAME" || targetDoc.activeElement.tagName === "iframe")) {
+                        return; // Exception for interactive embedded elements (Calculator panel)
+                    }
+                    handleViolation("left or minimized the exam window");
+                }, 100);
             });
 
             // Prevent shortcuts and context menu only when exam is active
@@ -357,7 +362,7 @@ if "exam" in st.query_params:
             
             if st.button("🚀 Start Exam", type="primary", use_container_width=True):
                 try:
-                    df_results_check = conn.read(worksheet="Student_Results", ttl="0m")
+                    df_results_check = conn.read(worksheet="Student_Results", ttl="10m")
                     exam_history = df_results_check[df_results_check["Exam_ID"] == exam_info["Exam_ID"]]
                     taken_names = [str(name).strip().lower() for name in exam_history["Student_Name"].dropna().tolist()]
                 except Exception:
@@ -659,7 +664,7 @@ if "exam" in st.query_params:
                 }
                 
                 try:
-                    df_results = conn.read(worksheet="Student_Results", ttl="0m") 
+                    df_results = conn.read(worksheet="Student_Results", ttl="10m") 
                     df_new_result = pd.DataFrame(result_data)
                     
                     if df_results.empty:
@@ -686,7 +691,7 @@ if "exam" in st.query_params:
                 
         st.write("---")
         try:
-            df_results = conn.read(worksheet="Student_Results", ttl="0m")
+            df_results = conn.read(worksheet="Student_Results", ttl="10m")
             exam_results = df_results[df_results["Exam_ID"] == exam_info["Exam_ID"]]
         except Exception as e:
             st.error("Could not fetch student results from the database.")
@@ -931,22 +936,39 @@ if choice == "Class Settings":
                 st.warning("Class already exists.")
                 
     with col2:
-        st.subheader("📝 Remove Existing Class")
+        st.subheader("📝 Edit / Remove Existing Classes")
         if st.session_state.classes:
-            class_to_delete = st.selectbox("Select Class to Remove", sorted(st.session_state.classes))
+            class_to_edit = st.selectbox("Select Class to Modify", sorted(st.session_state.classes))
             
-            st.write("🚨 **Danger Zone:**")
-            st.caption("Admin access required to delete a class.")
-            admin_pin = st.text_input("Enter Admin PIN to unlock:", type="password", key="del_class_pin")
-            
-            if admin_pin == "1960": 
-                if st.button("🗑️ Delete Class", type="primary"):
-                    st.session_state.classes.remove(class_to_delete)
-                    save_classes()
-                    st.warning(f"'{class_to_delete}' removed from configuration.")
-                    st.rerun()
-            elif admin_pin != "":
-                st.error("Incorrect PIN.")
+            edit_col1, edit_col2 = st.columns(2)
+            with edit_col1:
+                rename_val = st.text_input("Rename to:", value=class_to_edit)
+                if st.button("Rename Class"):
+                    new_name = rename_val.strip()
+                    if new_name:
+                        idx = st.session_state.classes.index(class_to_edit)
+                        st.session_state.classes[idx] = new_name
+                        if not df_quiz.empty and "Class" in df_quiz.columns:
+                            df_quiz.loc[df_quiz["Class"] == class_to_edit, "Class"] = new_name
+                            try:
+                                conn.update(worksheet="Questions", data=df_quiz)
+                            except: pass
+                        save_classes()
+                        st.success("Renamed successfully!")
+                        st.rerun()
+            with edit_col2:
+                st.write("🚨 **Danger Zone:**")
+                st.caption("Admin access required to delete a class.")
+                admin_pin = st.text_input("Enter Admin PIN to unlock:", type="password", key="del_class_pin")
+                
+                if admin_pin == "1960": 
+                    if st.button("🗑️ Delete Class", type="primary"):
+                        st.session_state.classes.remove(class_to_edit)
+                        save_classes()
+                        st.warning(f"'{class_to_edit}' removed from configuration.")
+                        st.rerun()
+                elif admin_pin != "":
+                    st.error("Incorrect PIN.")
 
 # --- MODULE: SUBJECT SETTINGS ---
 elif choice == "Subject Settings":
@@ -1538,11 +1560,11 @@ elif choice == "Exam Mode Setup":
                                 df_new_exam = pd.DataFrame(exam_record)
                                 df_new_qs = pd.DataFrame(final_exam_qs)
                                 
-                                df_active = conn.read(worksheet="Active_Exams")
+                                df_active = conn.read(worksheet="Active_Exams", ttl="10m")
                                 df_active = pd.concat([df_active, df_new_exam], ignore_index=True)
                                 conn.update(worksheet="Active_Exams", data=df_active)
                                 
-                                df_exam_questions = conn.read(worksheet="Exam_Questions")
+                                df_exam_questions = conn.read(worksheet="Exam_Questions", ttl="10m")
                                 df_exam_questions = pd.concat([df_exam_questions, df_new_qs], ignore_index=True)
                                 conn.update(worksheet="Exam_Questions", data=df_exam_questions)
                                 
@@ -1560,7 +1582,7 @@ elif choice == "Exam Mode Setup":
         st.warning("Deleting an exam will permanently erase it from Active_Exams, Exam_Questions, and Student_Results.")
         
         try:
-            df_active_view = conn.read(worksheet="Active_Exams", ttl="1m")
+            df_active_view = conn.read(worksheet="Active_Exams", ttl="10m")
             active_exams_list = ["Select an exam..."] + df_active_view["Exam_ID"].dropna().tolist()
         except:
             active_exams_list = ["Select an exam..."]
@@ -1574,17 +1596,17 @@ elif choice == "Exam Mode Setup":
                 if exam_to_delete != "Select an exam...":
                     try:
                         with st.spinner("Wiping exam records from all databases..."):
-                            df_active = conn.read(worksheet="Active_Exams")
+                            df_active = conn.read(worksheet="Active_Exams", ttl="10m")
                             df_active = df_active[df_active["Exam_ID"] != exam_to_delete]
                             conn.update(worksheet="Active_Exams", data=df_active)
                             
-                            df_eq = conn.read(worksheet="Exam_Questions")
+                            df_eq = conn.read(worksheet="Exam_Questions", ttl="10m")
                             if not df_eq.empty and "Exam_ID" in df_eq.columns:
                                 df_eq = df_eq[df_eq["Exam_ID"] != exam_to_delete]
                                 conn.update(worksheet="Exam_Questions", data=df_eq)
                                 
                             try:
-                                df_sr = conn.read(worksheet="Student_Results")
+                                df_sr = conn.read(worksheet="Student_Results", ttl="10m")
                                 if not df_sr.empty and "Exam_ID" in df_sr.columns:
                                     df_sr = df_sr[df_sr["Exam_ID"] != exam_to_delete]
                                     conn.update(worksheet="Student_Results", data=df_sr)
