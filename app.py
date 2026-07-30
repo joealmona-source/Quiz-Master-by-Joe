@@ -33,23 +33,96 @@ if "show_answer" not in st.session_state:
 if "quiz_state" not in st.session_state:
     st.session_state.quiz_state = "setup"
 
-# --- CUSTOM BALANCED CSS ---
+# --- CUSTOM BALANCED & THEME-ADAPTIVE CSS ---
 st.markdown("""
     <style>
+    /* Main Layout & Typography */
     .block-container {
-        padding-top: 3rem !important; 
-        padding-bottom: 2rem !important;
+        padding-top: 2.5rem !important; 
+        padding-bottom: 2.5rem !important;
+        max-width: 1200px !important;
     }
     div[data-testid="stVerticalBlock"] {
-        gap: 0.8rem !important;
+        gap: 1rem !important;
     }
+
+    /* Professional Button Styling */
     .stButton > button {
-        padding: 0.4rem 0.8rem !important;
-        min-height: 2.5rem !important;
-        border-radius: 6px !important;
+        padding: 0.5rem 1rem !important;
+        min-height: 2.6rem !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        transition: all 0.2s ease-in-out !important;
+        border: 1px solid rgba(128, 128, 128, 0.2) !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.02) !important;
     }
-    div[data-testid="stSelectbox"] div[role="combobox"] {
-        min-height: 2.5rem !important;
+    .stButton > button:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    /* Primary Buttons Styling */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+        color: #ffffff !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4) !important;
+    }
+
+    /* Container Cards & Forms */
+    div[data-testid="stForm"] {
+        background-color: var(--secondary-background-color) !important;
+        border-radius: 12px !important;
+        border: 1px solid rgba(128, 128, 128, 0.18) !important;
+        padding: 1.5rem !important;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03) !important;
+    }
+
+    /* Form Inputs & Selectboxes */
+    .stTextInput input, .stSelectbox div[role="combobox"], .stNumberInput input, .stTextArea textarea {
+        border-radius: 8px !important;
+        border: 1px solid rgba(128, 128, 128, 0.25) !important;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+    }
+    .stTextInput input:focus, .stSelectbox div[role="combobox"]:focus, .stTextArea textarea:focus {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
+    }
+
+    /* Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px !important;
+        border-bottom: 2px solid rgba(128, 128, 128, 0.15) !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 42px !important;
+        border-radius: 8px 8px 0px 0px !important;
+        padding: 0px 18px !important;
+        font-weight: 600 !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(37, 99, 235, 0.08) !important;
+        border-bottom: 3px solid #2563eb !important;
+    }
+
+    /* Metrics Styling */
+    div[data-testid="stMetric"] {
+        background-color: var(--secondary-background-color) !important;
+        padding: 16px 20px !important;
+        border-radius: 12px !important;
+        border: 1px solid rgba(128, 128, 128, 0.15) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02) !important;
+    }
+
+    /* Expander Styling */
+    div[data-testid="stExpander"] {
+        border-radius: 10px !important;
+        border: 1px solid rgba(128, 128, 128, 0.18) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02) !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -204,8 +277,8 @@ if "exam" in st.query_params:
         st.stop()
         
     exam_info = exam_data.iloc[0]
-    st.markdown(f"<h1 style='text-align: center; color: var(--text-color);'>{exam_info.get('School_Name', '')}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='text-align: center; color: #38bdf8;'>{exam_info.get('Exam_Title', '')}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h1 style='text-align: center; color: var(--text-color); margin-bottom: 0.2rem;'>{exam_info.get('School_Name', '')}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center; color: #38bdf8; margin-top: 0;'>{exam_info.get('Exam_Title', '')}</h3>", unsafe_allow_html=True)
     
     examiner_name = str(exam_info.get('Examiner_Name', '')).strip()
     if examiner_name and examiner_name.lower() != "nan":
@@ -216,7 +289,7 @@ if "exam" in st.query_params:
     if st.session_state.exam_state == "landing":
         components.html('<script>try { sessionStorage.removeItem("exam_strikes"); sessionStorage.removeItem("exam_last_violation"); sessionStorage.setItem("exam_active", "false"); } catch(e) {}</script>', height=0, width=0)
         st.write("---")
-        st.markdown(f"<div style='text-align: center; font-style: italic; font-size: 1.1rem; color: #475569;'><b>Instructions:</b><br>{exam_info['Instructions']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: center; font-style: italic; font-size: 1.1rem; color: var(--text-color); opacity: 0.85; background-color: var(--secondary-background-color); padding: 12px 20px; border-radius: 10px; border: 1px solid rgba(128,128,128,0.15);'><b>Instructions:</b><br>{exam_info['Instructions']}</div>", unsafe_allow_html=True)
         st.write("---")
         st.warning("**🔒 STRICT EXAM SECURITY RULES & WARNING:**\n* **No Copying or Text Selection:** Copying question text or using inspect tools is strictly disabled.\n* **No Screenshots or Screen Recording:** Capturing exam content is monitored and prohibited.\n* **Tab Switching / Window Minimizing:** You are **NOT** allowed to switch tabs or minimize this browser window. \n  * **3-Strike Policy:** You are allowed a maximum of **3 warnings**.\n  * **Automatic Submission:** On your **4th attempt/violation**, your exam will be **automatically submitted** immediately without notice.", icon="⚠️")
         
@@ -261,7 +334,7 @@ if "exam" in st.query_params:
                 else: st.error("Incorrect PIN. Access Denied.")
 
     elif st.session_state.exam_state == "in_progress":
-        st.markdown("<style>.stRadio label p { font-size: 22px !important; margin-left: 10px; line-height: 1.5; color: var(--text-color) !important; } .stRadio div[role='radio'] { transform: scale(1.6); margin-top: 2px; } .stRadio > div { gap: 1.5rem !important; }</style>", unsafe_allow_html=True)
+        st.markdown("<style>.stRadio label p { font-size: 20px !important; margin-left: 10px; line-height: 1.5; color: var(--text-color) !important; } .stRadio div[role='radio'] { transform: scale(1.4); margin-top: 2px; } .stRadio > div { gap: 1.2rem !important; }</style>", unsafe_allow_html=True)
         inject_exam_security()
         if "exam_qs" not in st.session_state:
             df_eq = conn.read(worksheet="Exam_Questions", ttl="10m")
@@ -281,7 +354,7 @@ if "exam" in st.query_params:
         top1, top2 = st.columns([1.5, 1.2])
         with top1:
             timer_html = f"""
-            <div id="exam_timer" style="font-size: 1.6rem; font-weight: bold; color: #16a34a; font-family: monospace; padding-top: 5px;"></div>
+            <div id="exam_timer" style="font-size: 1.5rem; font-weight: bold; color: #16a34a; font-family: monospace; padding-top: 5px;"></div>
             <script>
             var endTime = {st.session_state.exam_end_timestamp_ms};
             var elem = document.getElementById('exam_timer');
@@ -307,7 +380,7 @@ if "exam" in st.query_params:
         img_data = current_q_data.get('Image', '')
         if pd.notna(img_data) and str(img_data).startswith('data:image'): st.image(img_data, use_container_width=False, width=600)
             
-        st.markdown(f"<div style='background-color: var(--secondary-background-color); padding: 15px; border-radius: 8px; border-left: 5px solid #0284c7; margin-bottom: 20px;'><span style='color: var(--text-color); opacity: 0.7; font-weight: 600; font-size: 1.1rem;'>Question {idx + 1} of {len(qs)}</span><h3 style='color: var(--text-color); margin-top: 10px;'>{current_q_data.get('Question_Text', '')}</h3></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background-color: var(--secondary-background-color); padding: 18px 20px; border-radius: 10px; border-left: 5px solid #2563eb; border-right: 1px solid rgba(128,128,128,0.15); border-top: 1px solid rgba(128,128,128,0.15); border-bottom: 1px solid rgba(128,128,128,0.15); margin-bottom: 20px;'><span style='color: var(--text-color); opacity: 0.7; font-weight: 600; font-size: 1.05rem;'>Question {idx + 1} of {len(qs)}</span><h3 style='color: var(--text-color); margin-top: 8px;'>{current_q_data.get('Question_Text', '')}</h3></div>", unsafe_allow_html=True)
         saved_ans = st.session_state.student_answers.get(idx, None)
         q_type = str(current_q_data.get('Question_Type', ''))
         
@@ -425,7 +498,7 @@ if "exam" in st.query_params:
                     with col_q:
                         st.markdown(f"**{q_key}: {data['Question']}**")
                         color = "#16a34a" if (is_mcq and data.get("Is_Correct", False)) else ("#dc2626" if is_mcq else "#0284c7")
-                        st.markdown(f"<div style='background-color: var(--secondary-background-color); padding: 8px; border-radius: 5px; border-left: 4px solid {color}; margin-bottom: 4px;'><span style='color: var(--text-color);'>Student Answer: <b>{data.get('Student_Answer', '')}</b></span></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background-color: var(--secondary-background-color); padding: 10px 14px; border-radius: 8px; border-left: 4px solid {color}; border-right: 1px solid rgba(128,128,128,0.15); border-top: 1px solid rgba(128,128,128,0.15); border-bottom: 1px solid rgba(128,128,128,0.15); margin-bottom: 6px;'><span style='color: var(--text-color);'>Student Answer: <b>{data.get('Student_Answer', '')}</b></span></div>", unsafe_allow_html=True)
                         correct_ans = data.get("Correct_Answer", "Check master question list")
                         st.markdown(f"<div style='padding-left: 10px; margin-bottom: 15px;'><span style='color: #10b981; font-size: 0.9em; font-weight: 600;'>✅ Correct Answer: {correct_ans}</span></div>", unsafe_allow_html=True)
                     with col_score_box:
@@ -461,14 +534,18 @@ except Exception as e:
 
 # --- LOGIN SCREEN ---
 if not st.session_state.authenticated:
-    st.markdown("<style>.block-container { padding-top: 3rem !important; }</style>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("<h2 style='text-align: center;'>🔒 System Locked</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center;'>Enter your School Access Code</p>", unsafe_allow_html=True)
-        entered_code = st.text_input("Access Code", type="password").strip()
+        st.markdown("""
+            <div style='text-align: center; padding: 1.8rem 1rem 1rem 1rem;'>
+                <div style='font-size: 3.2rem; margin-bottom: 0.2rem;'>🔒</div>
+                <h2 style='margin: 0; font-weight: 700; color: var(--text-color);'>System Locked</h2>
+                <p style='color: var(--text-color); opacity: 0.75; font-size: 0.95rem; margin-top: 0.4rem;'>Enter your School Access Code to unlock</p>
+            </div>
+        """, unsafe_allow_html=True)
+        entered_code = st.text_input("Access Code", type="password", placeholder="••••••••").strip()
         
-        if st.button("Unlock System", use_container_width=True):
+        if st.button("Unlock System", type="primary", use_container_width=True):
             if entered_code == "1960": 
                 st.session_state.authenticated = True; st.session_state.logged_in_school = "Admin"
                 st.success("Access Granted! Welcome back, Admin."); time.sleep(1); st.rerun()
@@ -574,7 +651,7 @@ if choice == "School Management":
             with st.form("add_school_form", clear_on_submit=True):
                 new_school_name = st.text_input("School Name")
                 new_school_pass = st.text_input("Assign Password (Access Code)")
-                if st.form_submit_button("Add School"):
+                if st.form_submit_button("Add School", type="primary"):
                     if new_school_name and new_school_pass:
                         if not df_codes.empty and new_school_name in df_codes["School Name"].values:
                             st.error("School Name already exists!")
@@ -650,7 +727,7 @@ elif choice == "Class Settings":
     with col1:
         st.subheader("➕ Add New Class")
         new_class = st.text_input("Enter Class Name", placeholder="e.g., JSS 1A, SSS 2 Science")
-        if st.button("Add Class") and new_class:
+        if st.button("Add Class", type="primary") and new_class:
             clean_class = new_class.strip()
             if clean_class not in st.session_state.classes:
                 st.session_state.classes.append(clean_class); save_classes()
@@ -691,7 +768,7 @@ elif choice == "Subject Settings":
     with col1:
         st.subheader("➕ Add New Subject")
         new_sub = st.text_input("Enter Subject Name", placeholder="e.g., Further Mathematics")
-        if st.button("Add Subject") and new_sub:
+        if st.button("Add Subject", type="primary") and new_sub:
             clean_sub = new_sub.strip()
             if clean_sub not in st.session_state.subjects:
                 st.session_state.subjects.append(clean_sub); save_subjects()
@@ -771,7 +848,7 @@ elif choice == "AI Question Generator":
         if "temp_generated" in st.session_state:
             st.info("💡 **Review and edit the generated questions below.**")
             edited_df = st.data_editor(st.session_state["temp_generated"], use_container_width=True, num_rows="dynamic")
-            if st.button("💾 Save Edited Questions to Database"):
+            if st.button("💾 Save Edited Questions to Database", type="primary"):
                 edited_df["School"] = active_school 
                 df_quiz_global = pd.concat([df_quiz_global, edited_df], ignore_index=True)
                 try:
@@ -800,7 +877,7 @@ elif choice == "Manual Input":
         st.subheader("🖼️ Question Image (Optional)")
         uploaded_img = st.file_uploader("Upload Image (Capped at 100 KB)", type=["png", "jpg", "jpeg"])
         
-        if st.form_submit_button("Save Question"):
+        if st.form_submit_button("Save Question", type="primary"):
             img_b64 = process_image_for_db(uploaded_img) if uploaded_img else ""
             new_row = { "School": active_school, "Class": q_class, "Subject": sub, "Topic": top, "Type": q_type, "Question": q_text, "Image": img_b64, "Options": opts_text, "Correct Answer": ans_text }
             df_quiz_global = pd.concat([df_quiz_global, pd.DataFrame([new_row])], ignore_index=True)
@@ -897,7 +974,7 @@ elif choice == "Live Competition Mode":
             if st.session_state.quiz_state == "countdown":
                 placeholder = st.empty()
                 for i in [3, 2, 1]:
-                    placeholder.markdown(f"<div style='display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh;'><h1 style='font-size: 4rem; color: #e2e8f0; margin-bottom: 0px;'>GET READY</h1><h1 style='font-size: 8rem; color: #ff4b4b; margin-top: 10px;'>{i}</h1></div>", unsafe_allow_html=True)
+                    placeholder.markdown(f"<div style='display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh;'><h1 style='font-size: 4rem; color: var(--text-color); margin-bottom: 0px;'>GET READY</h1><h1 style='font-size: 8rem; color: #ef4444; margin-top: 10px;'>{i}</h1></div>", unsafe_allow_html=True)
                     time.sleep(1)
                 placeholder.markdown("<div style='display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh;'><h1 style='font-size: 10rem; color: #38bdf8; margin: 0;'>GO! 🚀</h1></div>", unsafe_allow_html=True); time.sleep(1)
                 st.session_state.quiz_state = "live"
@@ -921,26 +998,26 @@ elif choice == "Live Competition Mode":
                 st.write("") 
                 current_mode = st.session_state.get("timer_mode", "No Timer")
                 if current_mode == "Per Question":
-                    timer_html = f"""<div style="font-size: 22px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 6px; margin-bottom: 15px; background-color: #fff1f0; line-height: 1;"><span id="timer_display_{idx}"></span></div><script>var timeLeft = {st.session_state.get('timer_seconds', 60)}; var elem = document.getElementById('timer_display_{idx}'); var timerId = setInterval(countdown, 1000); function countdown() {{ if (timeLeft <= 0) {{ clearInterval(timerId); elem.innerHTML = "🚨 TIME UP!"; }} else {{ elem.innerHTML = "⏱️ " + timeLeft + "s"; timeLeft--; }} }} countdown();</script>"""
+                    timer_html = f"""<div style="font-size: 22px; font-family: monospace; font-weight: bold; color: #ef4444; text-align: center; border: 2px solid rgba(239, 68, 68, 0.4); border-radius: 10px; padding: 8px; margin-bottom: 15px; background-color: rgba(239, 68, 68, 0.08); line-height: 1;"><span id="timer_display_{idx}"></span></div><script>var timeLeft = {st.session_state.get('timer_seconds', 60)}; var elem = document.getElementById('timer_display_{idx}'); var timerId = setInterval(countdown, 1000); function countdown() {{ if (timeLeft <= 0) {{ clearInterval(timerId); elem.innerHTML = "🚨 TIME UP!"; }} else {{ elem.innerHTML = "⏱️ " + timeLeft + "s"; timeLeft--; }} }} countdown();</script>"""
                     components.html(timer_html, height=45)
                 elif current_mode == "Entire Session":
                     end_time_ms = st.session_state.get("session_end_time_ms", 0)
-                    timer_html = f"""<div style="font-size: 22px; font-family: monospace; font-weight: bold; color: #ff4b4b; text-align: center; border: 2px solid #ff4b4b; border-radius: 8px; padding: 6px; margin-bottom: 15px; background-color: #fff1f0; line-height: 1;"><span id="global_timer_display"></span></div><script>var endTime = {end_time_ms}; var elem = document.getElementById('global_timer_display'); function updateTimer() {{ var timeLeft = Math.floor((endTime - Date.now()) / 1000); if (timeLeft <= 0) {{ elem.innerHTML = "🚨 TIME UP!"; }} else {{ var h = Math.floor(timeLeft / 3600); var m = Math.floor((timeLeft % 3600) / 60); var s = timeLeft % 60; if (h > 0) {{ elem.innerHTML = "⏱️ " + (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s; }} else {{ elem.innerHTML = "⏱️ " + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s; }} }} }} updateTimer(); setInterval(updateTimer, 1000); </script>"""
+                    timer_html = f"""<div style="font-size: 22px; font-family: monospace; font-weight: bold; color: #ef4444; text-align: center; border: 2px solid rgba(239, 68, 68, 0.4); border-radius: 10px; padding: 8px; margin-bottom: 15px; background-color: rgba(239, 68, 68, 0.08); line-height: 1;"><span id="global_timer_display"></span></div><script>var endTime = {end_time_ms}; var elem = document.getElementById('global_timer_display'); function updateTimer() {{ var timeLeft = Math.floor((endTime - Date.now()) / 1000); if (timeLeft <= 0) {{ elem.innerHTML = "🚨 TIME UP!"; }} else {{ var h = Math.floor(timeLeft / 3600); var m = Math.floor((timeLeft % 3600) / 60); var s = timeLeft % 60; if (h > 0) {{ elem.innerHTML = "⏱️ " + (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s; }} else {{ elem.innerHTML = "⏱️ " + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s; }} }} }} updateTimer(); setInterval(updateTimer, 1000); </script>"""
                     components.html(timer_html, height=45)
                 
                 img_data = current_q.get('Image', '')
                 if pd.notna(img_data) and str(img_data).startswith('data:image'): st.image(img_data, use_container_width=False, width=800)
                     
-                st.markdown(f"<div style='background-color: #1e293b; padding: 12px 15px; border-radius: 8px; margin-bottom: 15px;'><span style='color: #38bdf8; font-weight: bold; font-size: 1.1rem;'>📍 Q{idx + 1}/{len(q_list)}:</span> <span style='color: #e2e8f0; font-size: 1rem;'>{current_q.get('Class', 'Uncategorized')} | {current_q['Subject']} | {current_q['Topic']}</span></div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='font-size: 1.25rem; font-weight: 500; line-height: 1.5; margin-bottom: 20px;'>{str(current_q['Question'])}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background-color: var(--secondary-background-color); border: 1px solid rgba(128,128,128,0.2); padding: 12px 18px; border-radius: 10px; margin-bottom: 15px;'><span style='color: #0284c7; font-weight: bold; font-size: 1.1rem;'>📍 Q{idx + 1}/{len(q_list)}:</span> <span style='color: var(--text-color); font-size: 1rem; font-weight: 500;'>{current_q.get('Class', 'Uncategorized')} | {current_q['Subject']} | {current_q['Topic']}</span></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size: 1.3rem; font-weight: 600; line-height: 1.5; margin-bottom: 20px; color: var(--text-color);'>{str(current_q['Question'])}</div>", unsafe_allow_html=True)
                 
                 if current_q['Type'] == "Multiple Choice (Objectives)" and pd.notna(current_q['Options']) and str(current_q['Options']).strip() != "":
                     options_split = str(current_q['Options']).split(","); prefixes = ["A)", "B)", "C)", "D)", "E)"]
                     for index, option in enumerate(options_split):
                         if index >= len(prefixes): break
                         clean_opt = option.strip()
-                        if any(clean_opt.startswith(p) for p in prefixes): st.markdown(f"**🔹 {clean_opt}**")
-                        else: st.markdown(f"**🔹 {prefixes[index]} {clean_opt}**")
+                        opt_display = clean_opt if any(clean_opt.startswith(p) for p in prefixes) else f"{prefixes[index]} {clean_opt}"
+                        st.markdown(f"<div style='background-color: var(--secondary-background-color); border: 1px solid rgba(128, 128, 128, 0.18); border-radius: 8px; padding: 10px 16px; margin-bottom: 8px; font-size: 1.05rem; font-weight: 500; color: var(--text-color);'>🔹 {opt_display}</div>", unsafe_allow_html=True)
                 
                 st.write("---") 
                 c1, c2, c3, c4 = st.columns(4)
@@ -993,7 +1070,7 @@ elif choice == "Exam Mode Setup":
                 num_theory = st.number_input("Short Answer / Theory Questions (per subject)", min_value=0, value=5)
                 allow_calc = st.checkbox("Allow Basic Scientific Calculator for this Exam")
 
-            if st.form_submit_button("Generate Exam Link"):
+            if st.form_submit_button("Generate Exam Link", type="primary"):
                 if not exam_title or not exam_pin or not subjects: st.error("Please fill in the Exam Title, Examiner PIN, and select at least one Subject.")
                 elif num_mcq == 0 and num_theory == 0: st.error("Please allocate at least 1 question to generate the exam.")
                 else:
