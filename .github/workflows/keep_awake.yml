@@ -1,14 +1,24 @@
-name: Keep Streamlit App Awake
+name: Keep Streamlit App Alive
 
 on:
   schedule:
     # Runs every 12 hours
     - cron: '0 */12 * * *'
-  workflow_dispatch: # Allows you to run it manually
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  ping:
+  keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Streamlit URL
-        run: curl -s https://quiz-master-by-joe-v8hv3x7blqf35lgjpge6br.streamlit.app > /dev/null
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Push empty commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git commit --allow-empty -m "Chore: Keep-alive ping"
+          git push
